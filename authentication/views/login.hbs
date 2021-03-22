@@ -1,0 +1,27 @@
+<nav class="row-g navbar navbar-expand-lg navbar-light bg-light px-2">
+	<a class="col-10 m-0 navbar-brand" href="#">Retro Board</a>
+	<a class="col-2 btn btn-outline-primary" href="/auth/register">Register</a>
+</nav>
+<div class="row justify-content-md-center" style="margin-top: 100px">
+	<div class="col-md-6">
+
+		{{#if message}}
+		<div class="alert {{messageClass}}" role="alert">
+			{{message}}
+		</div>
+		{{/if}}
+
+		<form method="POST" action="/auth/login">
+			<div class="form-group mb-3">
+				<label for="exampleInputEmail1">Email address</label>
+				<input name="email" type="email" class="form-control" id="exampleInputEmail1" placeholder="Enter email">
+			</div>
+			<div class="form-group mb-3">
+				<label for="exampleInputPassword1">Password</label>
+				<input name="password" type="password" class="form-control" id="exampleInputPassword1"
+					placeholder="Password">
+			</div>
+			<button type="submit" class="btn btn-primary">Login</button>
+		</form>
+	</div>
+</div>
