@@ -18,6 +18,8 @@ const http = Http.createServer(app);
 const io = SocketIo(http)
 
 const genToken = () => crypto.randomBytes(30).toString('hex')
+const formatDate = (date) => date.toISOString().replace(/T/, ' ').replace(/\..+/, '')
+
 const SESSION_ID = 'SessionId'
 
 app.engine('hbs', exphbs({ extname: '.hbs' }));
@@ -83,10 +85,14 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 			const userId = req.user.id
 			try {
 				const templates = await Template.find({ createrId: userId })
+				const boards = await Board.find({ createrId: userId })
 				res.render('dashboard', {
 					templates: templates.length > 0 
 						? templates.map(doc => doc.toObject()) 
-						: undefined 
+						: undefined,
+					boards: boards.length > 0
+						? boards.map(doc => doc.toObject()).map(obj => Object.assign(obj, { date: formatDate(obj.date) }))
+						: undefined
 				})
 			} catch (err) {
 				console.error(err)
@@ -170,6 +176,17 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 			}
 		})
 
+		app.post('/board-delete', secure, async (req, res) => {
+			const userId = req.user.id
+			const boardId = req.body.id
+			try {
+				await Board.deleteOne({ _id: boardId, createrId: userId })
+				res.redirect('/dashboard')
+			} catch (err) {
+				console.error(err)
+			}
+		})
+
 		app.get('/board', async (req, res) => {
 			const boardId = req.query['board-id']
 			try {
@@ -207,7 +224,6 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 		 * Socket Connection
 		 */
 		io.on('connection', (socket) => {
-			console.log('user joined: ', socket.boardId)
 			if (!socket.boardId) {
 				return socket.send('error', { message: 'Board: Not Found' })
 			}
