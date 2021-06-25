@@ -6,7 +6,6 @@ const bodyParser = require('body-parser')
 const mongoose = require('mongoose')
 const exphbs = require('express-handlebars')
 const cookieParser = require('cookie-parser')
-// const session = require('express-session')
 const SocketIo = require('socket.io')
 const redis = require('./redis-client')
 const templateSchema = require('./models/Template')
@@ -17,9 +16,15 @@ const app = express()
 const http = Http.createServer(app);
 const io = SocketIo(http)
 
+/**
+ * Generates a random token. Format is hex
+ */
 const genToken = () => crypto.randomBytes(30).toString('hex')
+/**
+ * Formates a date.
+ */
 const formatDate = (date) => date.toISOString().replace(/T/, ' ').replace(/\..+/, '')
-
+/* Property name for the session id in cookie. */
 const SESSION_ID = 'SessionId'
 
 app.engine('hbs', exphbs({ extname: '.hbs' }));
@@ -29,7 +34,10 @@ app.use(bodyParser.urlencoded({ extended: false }))
 app.use(bodyParser.json())
 app.use(cookieParser())
 app.use(express.static(path.join(__dirname, 'public')))
-// app.use(session({ secret: 'secret session' }))
+/**
+ * Middleware
+ * Sets the user property if possible.
+ */
 app.use('/', async (req, _, next) => {
 	try {
 		const token = req.cookies['AuthToken']
@@ -42,7 +50,10 @@ app.use('/', async (req, _, next) => {
 		next()
 	}
 })
-
+/**
+ * Middleware
+ * Sets boardId, sessionId and user if possible.
+ */
 io.use(async (socket, next) => {
 	try {
 		const token = socket.handshake.auth.authToken
@@ -58,7 +69,11 @@ io.use(async (socket, next) => {
 		console.error(err)
 	}
 })
-
+/**
+ * Middleware
+ * Checks if the user is set on req.
+ * If user is not present res.redirect('/auth/login') will be called.
+ */
 const secure = (req, res, next) => {
 	if (req.user) {
 		next()
@@ -66,9 +81,13 @@ const secure = (req, res, next) => {
 		res.redirect('/auth/login')
 	}
 }
-
+/**
+ * Middleware
+ * Checks if the user is set on socket.
+ * If user is not present an error will be thrown on socket.
+ */
 const socketSecure = (socket, next) => {
-	if (req.user) {
+	if (socket.user) {
 		next()
 	} else {
 		next(new Error('invalid user'))
@@ -80,7 +99,10 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 		const Template = connection.model('Template', templateSchema)
 		const Board = connection.model('Board', boardSchema)
 		const Message = connection.model('Message', messageSchema)
-
+		/**
+		 * Renders the dashboard for a user.
+		 * Dashboard includes all templates and boards that are created by the user.
+		 */
 		app.get('/dashboard', secure, async (req, res) => {
 			const userId = req.user.id
 			try {
@@ -91,14 +113,19 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 						? templates.map(doc => doc.toObject()) 
 						: undefined,
 					boards: boards.length > 0
-						? boards.map(doc => doc.toObject()).map(obj => Object.assign(obj, { date: formatDate(obj.date) }))
+						? boards
+							.map(doc => doc.toObject())
+							.map(obj => Object.assign(obj, { date: formatDate(obj.date) }))
 						: undefined
 				})
 			} catch (err) {
 				console.error(err)
 			}
 		})
-		
+		/**
+		 * Renders a template by id as json if the user that requests it is the 
+		 * creater of that templarte.
+		 */
 		app.get('/template', secure, async (req, res) => {
 			const userId = req.user.id
 			try {
@@ -111,7 +138,9 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 				console.error(err)
 			}
 		})
-
+		/**
+		 * Saves a template a in the data base
+		 */
 		app.post('/template-create', secure, async (req, res) => {
 			const userId = req.user.id
 			const template = new Template({
@@ -126,7 +155,10 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 				console.error(err)
 			}
 		})
-
+		/**
+		 * Removes a template from the database if the user that sends the 
+		 * request is the creater of the template.
+		 */
 		app.post('/template-delete', secure, async (req, res) => {
 			const userId = req.user.id
 			const boardId = req.body.id
@@ -137,7 +169,10 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 				console.error(err)
 			}
 		})
-
+		/**
+		 * Updates a template if the user that sends the
+		 * request is the creater of the template.
+		 */
 		app.post('/template-update', secure, async (req, res) => {
 			const userId = req.user.id
 			const templateId = req.body.id
@@ -149,7 +184,9 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 				console.error(err)
 			}
 		})
-		
+		/**
+		 * Creates a board based on a template id
+		 */
 		app.post('/board-create', secure, async (req, res) => {
 			const userId = req.user.id
 			const templateId = req.body['template-id']
@@ -175,7 +212,10 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 				console.error(err)
 			}
 		})
-
+		/**
+		 * Removes a board from the database if the user that sends the
+		 * request is the creater of the board.
+		 */
 		app.post('/board-delete', secure, async (req, res) => {
 			const userId = req.user.id
 			const boardId = req.body.id
@@ -186,7 +226,9 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 				console.error(err)
 			}
 		})
-
+		/**
+		 * Renders a board by id as json.
+		 */
 		app.get('/board', async (req, res) => {
 			const boardId = req.query['board-id']
 			try {
@@ -197,7 +239,9 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 				res.sendStatus(500)
 			}
 		})
-
+		/**
+		 * Renders public retro boards.
+		 */
 		app.get('/public/retro', async (req, res) => {
 			if (!req.cookies[SESSION_ID]) {
 				const sessionId = genToken()
@@ -205,7 +249,9 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 			}
 			res.render('public-retro')
 		})
-
+		/**
+		 * Renders admin retro boards.
+		 */
 		app.get('/admin/retro', secure, async (req, res) => {
 			if (!req.cookies[SESSION_ID]) {
 				const sessionId = genToken()
@@ -213,11 +259,15 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 			}
 			res.render('admin-retro')
 		})
-
+		/**
+		 * Renders the board-builder app.
+		 */
 		app.get('/template-create', secure, (req, res) => {
 			res.render('board-builder')
 		})
-
+		/**
+		 * Renders the landing page.
+		 */
 		app.get('/', (_, res) => res.render('home'))
 		
 		/**
@@ -228,7 +278,11 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 				return socket.send('error', { message: 'Board: Not Found' })
 			}
 			socket.join(socket.boardId)
-
+			/**
+			 * Adds an empty meesage to a board.
+			 * data.boardId: the id of the board where the message belongs to.
+			 * data.laneId: the id of the lane on the board where the message is placed.
+			 */
 			socket.on('create-message', async (data) => {
 				const boardId = data.boardId
 				const laneId = data.laneId
@@ -252,7 +306,12 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 					socket.send('error', { message: 'Something went wrong' })
 				}
 			})
-
+			/**
+			 * Removes a message from a board
+			 * data.boardId: the id of the board where the message belongs to.
+			 * data.laneId: the id of the land where the message is placed.
+			 * data.messageId: the id of the message that should be removed.
+			 */
 			socket.on('delete-message', async (data) => {
 				const boardId = data.boardId
 				const laneId = data.laneId
@@ -275,7 +334,13 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 					socket.send('error', { message: 'Something went wrong' })
 				}
 			})
-
+			/**
+			 * Updates the text of a message.
+			 * data.boardId: the id of the board where the message belongs to.
+			 * data.laneId: the id of the land where the message is placed.
+			 * data.messageId: the id of the message that should be updated.
+			 * data.text: the new text of the message.
+			 */
 			socket.on('update-message-text', async (data) => {
 				const boardId = data.boardId
 				const laneId = data.laneId
@@ -319,6 +384,12 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 					socket.send('error', { message: 'Something went wrong' })
 				}
 			})
+			/**
+			 * Increases the upvotes of a message by one.
+			 * data.boardId: the id of the board where the message belongs to.
+			 * data.laneId: the id of the land where the message is placed.
+			 * data.messageId: the id of the message that should be updated.
+			 */
 			socket.on('update-message-upvote', async (data) => {
 				const boardId = data.boardId
 				const laneId = data.laneId
