@@ -3,11 +3,25 @@ const crypto = require('crypto')
 const userSchema = require('./model/User')
 const redis = require('./redis-client.js')
 const AUTH_TOKEN = 'AuthToken'
-
+/**
+ * Generates a hash from the input.
+ */
 const sha256 = (input) => crypto.createHash('sha256').update(input).digest('base64')
+/**
+ * Generates a random token. Format is hex
+ */
 const genToken = () => crypto.randomBytes(30).toString('hex')
+/**
+ * Renders a given template with error message
+ */
 const renderDanger = (res, template) => (message) => res.render(template, { message, messageClass: 'alert-danger' })
-
+/**
+ * Writes a user into the data base.
+ * Error if:
+ * 	password and password confirmation doesn't match
+ * 	user already exists
+ * 	user can't be saved
+ */
 const register = (User) => async (req, res) => {
 	const { firstName, lastName, email, password, confirmPassword } = req.body
 	const renderDangerRegister = renderDanger(res, 'register')
@@ -36,7 +50,13 @@ const register = (User) => async (req, res) => {
 		messageClass: 'alert-success'
 	})
 }
-
+/**
+ * Logs in a user by setting a auth token in on cookie.
+ * Error if:
+ * 	User not found.
+ * 	Password doesn't match
+ * 	Redis cannot save token
+ */
 const login = (User) => async (req, res) => {
 	const renderDangerLogin = renderDanger(res, 'login')
 	const { email, password } = req.body
@@ -65,12 +85,16 @@ const login = (User) => async (req, res) => {
 		return renderDangerLogin('Something went wrong')
 	}
 }
-
+/**
+ * Removes the auth token from cookie.
+ */
 const logout = (_, res) => {
 	res.cookie(AUTH_TOKEN, null)
 	res.render('login')
 }
-
+/**
+ * Assigns routes to there handlers.
+ */
 module.exports = (app, connection) => {
 	const User = connection.model('User', userSchema)
 	app.get('/', (_, res) => res.render('home'))

@@ -13,12 +13,12 @@ const user = {
 	email: {
 		type: String,
 		trim: true,
-		unique: [true, 'email name is required']
+		unique: [true, 'email is required']
 	},
 	password: {
 		type: String,
 		trim: true,
-		required: [true, 'password name is required']
+		required: [true, 'password is required']
 	},
 	role: {
 		type: String,
