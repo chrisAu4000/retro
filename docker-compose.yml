@@ -20,7 +20,7 @@ services:
       - '3000:3000'
     environment:
       # - DEBUG=*
-      - REDIS_URL=redis://retro-board-redis
+      - REDIS_URL=redis://redis
       - DEVELOPMENT=true
     depends_on: 
       - mongo
@@ -35,7 +35,7 @@ services:
     ports:
       - '3001:3001'
     environment:
-      - REDIS_URL=redis://retro-board-redis
+      - REDIS_URL=redis://redis
     depends_on: 
       - mongo
     links:
@@ -55,8 +55,9 @@ services:
     ports: 
       - '27017:27017'
     command: --logpath=/dev/null
+
   redis:
-    container_name: retro-board-redis
+    container_name: redis
     image: redis
     ports:
       - '6379:6379'

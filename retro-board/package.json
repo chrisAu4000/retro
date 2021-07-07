@@ -1,14 +1,16 @@
 {
-  "name": "docker-node-mongo",
+  "name": "retro-board",
   "version": "0.0.1",
-  "description": "dockerised node app with mongodb ",
+  "description": "retro board",
   "main": "index.js",
   "scripts": {
     "start": "npm-run-all build:elm-apps run:server",
+    "dev": "DEVELOPMENT=true npm-run-all build:elm-apps dev:server",
     "run:server": "node index.js",
+    "dev:server": "nodemon -e js index.js",
     "build:elm-apps": "run-p build:elm-board build:elm-board-admin build:elm-board-builder",
     "build:elm-board": "webpack --config webpack.config.board.js",
-	"build:elm-board-admin": "webpack --config webpack.config.board-admin.js",
+    "build:elm-board-admin": "webpack --config webpack.config.board-admin.js",
     "build:elm-board-builder": "webpack --config webpack.config.board-builder.js",
     "test": "#"
   },
@@ -32,6 +34,7 @@
     "elm-webpack-loader": "^7.0.1",
     "npm-run-all": "^4.1.5",
     "webpack": "^5.23.0",
-    "webpack-cli": "^4.5.0"
+    "webpack-cli": "^4.5.0",
+    "nodemon": "^2.0.9"
   }
 }

@@ -1,5 +1,10 @@
+.DS_Store
 Dockerfile
 node_modules
 npm-debug.log
 elm-apps/board/elm-stuff
+elm-apps/board-admin/elm-stuff
 elm-apps/board-builder/elm-stuff
+public/board.js
+public/board-admin.js
+public/board-builder.js
