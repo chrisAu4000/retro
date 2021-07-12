@@ -7,9 +7,6 @@ module.exports = {
 		filename: 'board-admin.js',
 		path: path.resolve(__dirname, 'public'),
 	},
-	// If your entry-point is at "src/index.js" and
-	// your output is in "/dist", you can ommit
-	// these parts of the config
 	module: {
 		rules: [
 			{

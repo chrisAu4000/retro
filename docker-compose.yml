@@ -22,7 +22,6 @@ services:
         # - DEBUG=*
             - REDIS_URL=redis://redis
             - MONGO_URL=mongodb://mongo:27017/retro-board
-            - DEVELOPMENT=true
         depends_on: 
             - mongo
         links:
