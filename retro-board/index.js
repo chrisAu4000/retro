@@ -75,6 +75,12 @@ io.use(async (socket, next) => {
  * If user is not present res.redirect('/auth/login') will be called.
  */
 const secure = (req, res, next) => {
+	if (process.env.DEVELOPMENT === 'true') {
+		req.user = {
+			id: 'test-user'
+		}
+		return next();
+	}
 	if (req.user) {
 		next()
 	} else {
@@ -94,7 +100,7 @@ const socketSecure = (socket, next) => {
 	}
 }
 
-mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
+mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true })
 	.then((connection) => {
 		const Template = connection.model('Template', templateSchema)
 		const Board = connection.model('Board', boardSchema)
@@ -433,7 +439,7 @@ mongoose.connect('mongodb://mongo:27017/retro-board', { useNewUrlParser: true })
 				}
 			})
 		})
-		
+
 		console.log('MongoDB Connected')
 	})
 	.catch(err => console.error(err))

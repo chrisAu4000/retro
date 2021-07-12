@@ -151,21 +151,11 @@ update msg model =
 
         UpdateTextareaHeight message result ->
             case result of
-                Result.Err e ->
-                    let
-                        _ =
-                            Debug.log "error" e
-                    in
+                Result.Err _ ->
                     ( model, Cmd.none )
 
                 Result.Ok viewport ->
                     let
-                        _ =
-                            Debug.log "viewport" viewport
-
-                        _ =
-                            Debug.log "scrollHeight" viewport.scene.height
-
                         val =
                             JsonEncode.object
                                 [ ( "id", JsonEncode.string message.id )

@@ -4,4 +4,3 @@ node_modules
 */**/elm-stuff
 mongo
 scripts
-retro-board/public/*.js
