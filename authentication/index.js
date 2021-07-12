@@ -17,8 +17,8 @@ const mongoOpts = {
 mongoose.connect('mongodb://mongo:27017/users', mongoOpts)
 	.then((connection) => {
 		routes(app, connection)
-		console.log('Authentication - MongoDB Connected')
+		console.log('Authentication running ...')
 	})
 	.catch(err => console.error(err))
 
-app.listen(3001, () => console.log('Authentication running ...'))
+app.listen(3001)
