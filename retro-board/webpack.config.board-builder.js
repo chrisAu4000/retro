@@ -29,9 +29,8 @@ module.exports = {
     ],
     noParse: [/.elm$/]
   },
-
-  devServer: {
-    inline: true,
-    stats: 'errors-only'
+  watch: process.env.DEVELOPMENT === 'true',
+  watchOptions: {
+    ignored: ['**/node_modules'],
   }
 };
