@@ -27,4 +27,11 @@ const MessageSchema = new Schema({
 	}
 })
 
-module.exports = MessageSchema
+const MessageStackSchema = new Schema({
+	messages: [MessageSchema]
+})
+
+module.exports = {
+	messageSchema: MessageSchema,
+	messageStackSchema: MessageStackSchema
+}

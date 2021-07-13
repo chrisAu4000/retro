@@ -10,7 +10,7 @@ const SocketIo = require('socket.io')
 const redis = require('./redis-client')
 const templateSchema = require('./models/Template')
 const boardSchema = require('./models/Board')
-const messageSchema = require('./models/Message')
+const { messageSchema, messageStackSchema } = require('./models/Message')
 
 const app = express()
 const http = Http.createServer(app);
@@ -76,10 +76,8 @@ io.use(async (socket, next) => {
  */
 const secure = (req, res, next) => {
 	if (process.env.DEVELOPMENT === 'true') {
-		req.user = {
-			id: 'test-user'
-		}
-		return next();
+		req.user = { id: 'test-user' }
+		return next()
 	}
 	if (req.user) {
 		next()
@@ -100,11 +98,67 @@ const socketSecure = (socket, next) => {
 	}
 }
 
-mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true })
+mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true })
 	.then((connection) => {
 		const Template = connection.model('Template', templateSchema)
 		const Board = connection.model('Board', boardSchema)
 		const Message = connection.model('Message', messageSchema)
+		const MessageStack = connection.model('MessageStack', messageStackSchema)
+		const getStackData = async (boardId, laneId, stackId) => {
+			const lanesDoc = await Board.findOne({ _id: boardId }, { lanes: 1 })
+			return new Promise((res, rej) => {
+				lanesDoc.lanes.map(async (lane, laneIndex) => {
+					if (lane._id.toString() !== laneId) return
+					lane.stacks.map(async (stack, stackIndex) => {
+						if (stack._id.toString() !== stackId) return
+						res({ lane, laneIndex, stack, stackIndex })
+					})
+				})
+			})
+		}
+
+		const getMessageData = async (boardId, laneId, stackId, messageId) => {
+			const { lane, laneIndex, stack, stackIndex } = await getStackData(boardId, laneId, stackId)
+			return new Promise((res) => {
+				stack.messages.map(async (message, messageIndex) => {
+					if (message._id.toString() !== messageId) return
+					res({ lane, laneIndex, stack, stackIndex, message, messageIndex })
+				})
+			})
+		}
+
+		const deleteMessage = async (boardId, laneId, stackId, messageId) => {
+			const { stack } = await getStackData(boardId, laneId, stackId)
+			if (stack.messages.length === 1) {
+				return await Board.updateOne({
+					"_id": boardId,
+					"lanes._id": laneId
+				}, {
+					"$pull": { "lanes.$.stacks": { "_id": stackId } }
+				}, {
+					safe: true
+				})
+			} else {
+				const { laneIndex, stackIndex } = await getStackData(boardId, laneId, stackId)
+				const toSet = `lanes.${laneIndex}.stacks.${stackIndex}.messages`
+				await Board.updateOne({
+					"_id": boardId,
+					"lanes": {
+						"$elemMatch": {
+							"_id": laneId,
+							"stacks": {
+								"$elemMatch": {
+									"_id": stackId
+								}
+							}
+						}
+					}
+				},
+					{ "$pull": { [`${toSet}`]: { "_id": messageId } } },
+					{ safe: true }
+				)
+			}
+		}
 		/**
 		 * Renders the dashboard for a user.
 		 * Dashboard includes all templates and boards that are created by the user.
@@ -285,7 +339,7 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true })
 			}
 			socket.join(socket.boardId)
 			/**
-			 * Adds an empty meesage to a board.
+			 * Adds an messagestack with one empty meesage to a board.
 			 * data.boardId: the id of the board where the message belongs to.
 			 * data.laneId: the id of the lane on the board where the message is placed.
 			 */
@@ -304,7 +358,10 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true })
 						upvotes: 0,
 						type: 'Item'
 					})
-					lane.messages.push(message)
+					const stack = new MessageStack({
+						messages: [ message ]
+					})
+					lane.stacks.push(stack)
 					await board.save()
 					io.to(socket.boardId).emit('update-board', board)
 				} catch (err) {
@@ -321,17 +378,10 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true })
 			socket.on('delete-message', async (data) => {
 				const boardId = data.boardId
 				const laneId = data.laneId
+				const stackId = data.stackId
 				const messageId = data.messageId
 				try {
-					await Board.updateOne(
-						{ 
-							"_id": boardId, 
-							"lanes._id": laneId
-						}, {
-							"$pull": { "lanes.$.messages": { "_id": messageId } }
-						}, { 
-							safe: true 
-						})
+					await deleteMessage(boardId, laneId, stackId, messageId)
 					const board = await Board.findById(boardId)
 					if (!board) socket.send('error', { message: 'Board: Not Found' })
 					io.to(socket.boardId).emit('update-board', board)
@@ -350,6 +400,7 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true })
 			socket.on('update-message-text', async (data) => {
 				const boardId = data.boardId
 				const laneId = data.laneId
+				const stackId = data.stackId
 				const messageId = data.messageId
 				const text = data.text
 				try {
@@ -358,31 +409,37 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true })
 						if (lane._id.toString() !== laneId) {
 							return
 						}
-						lane.messages.map(async (message, messageI) => {
-							if (message._id.toString() !== messageId) {
+						lane.stacks.map(async (stack, stackI) => {
+							if (stack._id.toString() !== stackId) {
 								return
 							}
-							const toSet = 'lanes.'+laneI+'.messages.'+messageI+'.text'
-							await Board.updateOne(
-								{
+							stack.messages.map(async (message, messageI) => {
+								if (message._id.toString() !== messageId) return
+								const toSet = `lanes.${laneI}.stacks.${stackI}.messages.${messageI}.text`
+								await Board.updateOne({
 									"_id": boardId,
 									"lanes": {
 										"$elemMatch": {
 											"_id": laneId,
-											"messages": {
+											"stacks": {
 												"$elemMatch": {
-													"_id": messageId
+													"_id": stackId,
+													"messages": {
+														"$elemMatch": {
+															"_id": messageId
+														}
+													}
 												}
 											}
 										}
 									}
 								},
 								{ "$set": { [`${toSet}`]: text } },
-								{ safe: true }
-							)
-							const board = await Board.findById(boardId)
-							if (!board) socket.send('error', { message: 'Board: Not Found' })
-							io.to(socket.boardId).emit('update-board', board)
+								{ safe: true })
+								const board = await Board.findById(boardId)
+								if (!board) socket.send('error', { message: 'Board: Not Found' })
+								io.to(socket.boardId).emit('update-board', board)
+							})
 						})
 					})
 				} catch (err) {
@@ -399,49 +456,84 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true })
 			socket.on('update-message-upvote', async (data) => {
 				const boardId = data.boardId
 				const laneId = data.laneId
+				const stackId = data.stackId
 				const messageId = data.messageId
 				try {
-					const lanesDoc = await Board.findOne({ _id: boardId }, { lanes: 1 })
-					await lanesDoc.lanes.map(async (lane, laneI) => {
-						if (lane._id.toString() !== laneId) {
-							return
-						}
-						lane.messages.map(async (message, messageI) => {
-							if (message._id.toString() !== messageId) {
-								return
-							}
-							const toSet = 'lanes.' + laneI + '.messages.' + messageI + '.upvotes'
-							await Board.updateOne(
-								{
-									"_id": boardId,
-									"lanes": {
-										"$elemMatch": {
-											"_id": laneId,
-											"messages": {
-												"$elemMatch": {
-													"_id": messageId
-												}
+					const { laneIndex, stackIndex, messageIndex } = await getMessageData(boardId, laneId, stackId, messageId)
+					const toSet = `lanes.${laneIndex}.stacks.${stackIndex}.messages.${messageIndex}.upvotes`
+					await Board.updateOne({
+						"_id": boardId,
+						"lanes": {
+							"$elemMatch": {
+								"_id": laneId,
+								"stacks": {
+									"$elemMatch": {
+										"_id": stackId,
+										"messages": {
+											"$elemMatch": {
+												"_id": messageId
 											}
 										}
 									}
-								},
-								{ "$inc": { [`${toSet}`]: 1 } },
-								{ safe: true }
-							)
-							const board = await Board.findById(boardId)
-							if (!board) socket.send('error', { message: 'Board: Not Found' })
-							io.to(socket.boardId).emit('update-board', board)
-						})
+								}
+							}
+						}
+					},
+					{ "$inc": { [`${toSet}`]: 1 } },
+					{ safe: true })
+					const board = await Board.findById(boardId)
+					if (!board) socket.send('error', { message: 'Board: Not Found' })
+					io.to(socket.boardId).emit('update-board', board)
+				} catch (err) {
+					console.error(err)
+					socket.send('error', { message: 'Something went wrong' })
+				}
+			})
+			socket.on('merge-message', async (data) => {
+				const boardId = data.boardId
+				const childLaneId = data.childLaneId
+				const parentLaneId = data.parentLaneId
+				const childStackId = data.childStackId
+				const parentStackId = data.parentStackId
+				const childMessageId = data.childMessageId
+				try {
+					// get child data
+					const { message } = await getMessageData(boardId, childLaneId, childStackId, childMessageId)
+					const { laneIndex, stackIndex } = await getStackData(boardId, parentLaneId, parentStackId)
+					const toSet = `lanes.${laneIndex}.stacks.${stackIndex}.messages`
+					// push child data in patent stack
+					const x = await Board.updateOne({
+						"_id": boardId,
+						"lanes": {
+							"$elemMatch": {
+								"_id": parentLaneId,
+								"stacks": {
+									"$elemMatch": {
+										"_id": parentStackId
+									}
+								}
+							}
+						}
+					}, {
+						"$push": { [`${toSet}`]: message }
+					}, {
+						safe: true
 					})
+					await deleteMessage(boardId, childLaneId, childStackId, childMessageId)
+					// return new board state
+					const board = await Board.findById(boardId)
+					if (!board) socket.send('error', { message: 'Board: Not Found' })
+					io.to(socket.boardId).emit('update-board', board)
 				} catch (err) {
 					console.error(err)
 					socket.send('error', { message: 'Something went wrong' })
 				}
 			})
 		})
-
 		console.log('MongoDB Connected')
 	})
 	.catch(err => console.error(err))
 
 http.listen(3000, () => console.log('Server running ...'))
+
+
