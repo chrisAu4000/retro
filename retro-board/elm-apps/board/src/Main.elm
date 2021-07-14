@@ -10,7 +10,7 @@ import Json.Decode as JsonDecode
 import Json.Encode as JsonEncode
 import Model.Board exposing (Board, boardDecoder)
 import Model.Lane exposing (Lane)
-import Model.Message exposing (Message)
+import Model.Message exposing (Message, MessageStack)
 import Model.WebSocketMessage exposing (socketMessageEncoder)
 import Url exposing (Url)
 
@@ -24,9 +24,9 @@ port receiveSocketMessage : (JsonDecode.Value -> msg) -> Sub msg
 type Msg
     = FetchDataRequest (Result Http.Error Board)
     | CreateMessage Lane
-    | DeleteMessage Lane Message
-    | UpdateMessageText Lane Message String
-    | UpdateMessageUpvotes Lane Message
+    | DeleteMessage Lane MessageStack Message
+    | UpdateMessageText Lane MessageStack Message String
+    | UpdateMessageUpvotes Lane MessageStack Message
     | OnSocket (Result JsonDecode.Error Board)
 
 
@@ -115,20 +115,22 @@ update msg model =
                 |> sendSocketMessage
                 |> Tuple.pair model
 
-        DeleteMessage lane message ->
+        DeleteMessage lane stack message ->
             JsonEncode.object
                 [ ( "boardId", boardId )
                 , ( "laneId", JsonEncode.string lane.id )
+                , ( "stackId", JsonEncode.string stack.id )
                 , ( "messageId", JsonEncode.string message.id )
                 ]
                 |> socketMessageEncoder "delete-message"
                 |> sendSocketMessage
                 |> Tuple.pair model
 
-        UpdateMessageText lane message text ->
+        UpdateMessageText lane stack message text ->
             JsonEncode.object
                 [ ( "boardId", boardId )
                 , ( "laneId", JsonEncode.string lane.id )
+                , ( "stackId", JsonEncode.string stack.id )
                 , ( "messageId", JsonEncode.string message.id )
                 , ( "text", JsonEncode.string text )
                 ]
@@ -136,10 +138,11 @@ update msg model =
                 |> sendSocketMessage
                 |> Tuple.pair model
 
-        UpdateMessageUpvotes lane message ->
+        UpdateMessageUpvotes lane stack message ->
             JsonEncode.object
                 [ ( "boardId", boardId )
                 , ( "laneId", JsonEncode.string lane.id )
+                , ( "stackId", JsonEncode.string stack.id )
                 , ( "messageId", JsonEncode.string message.id )
                 ]
                 |> socketMessageEncoder "update-message-upvote"
@@ -160,8 +163,8 @@ handleError model msg =
     ( { model | error = Just msg }, Cmd.none )
 
 
-createMessage : String -> Lane -> Message -> Html Msg
-createMessage userId lane msg =
+createMessage : String -> Lane -> MessageStack -> Message -> Html Msg
+createMessage userId lane stack msg =
     let
         isCreater =
             userId == msg.createrId
@@ -180,7 +183,7 @@ createMessage userId lane msg =
         [ div
             [ class "d-flex justify-content-end" ]
             [ button
-                [ onClick (DeleteMessage lane msg)
+                [ onClick (DeleteMessage lane stack msg)
                 , class closeBtnClass
                 , disabled (not isCreater)
                 ]
@@ -191,16 +194,16 @@ createMessage userId lane msg =
             [ div
                 [ class "card-text" ]
                 [ if isCreater then
-                    createOwnedMessageInput lane msg
+                    createOwnedMessageInput lane stack msg
 
                   else
-                    createForeignMessageInput lane msg
+                    createForeignMessageInput msg
                 ]
             ]
         , div
             [ class "d-flex justify-content-end" ]
             [ button
-                [ onClick (UpdateMessageUpvotes lane msg)
+                [ onClick (UpdateMessageUpvotes lane stack msg)
                 , class "btn btn-primary rounded-circle m-1"
                 ]
                 [ text (String.fromInt msg.upvotes) ]
@@ -208,14 +211,14 @@ createMessage userId lane msg =
         ]
 
 
-createOwnedMessageInput : Lane -> Message -> Html Msg
-createOwnedMessageInput lane msg =
+createOwnedMessageInput : Lane -> MessageStack -> Message -> Html Msg
+createOwnedMessageInput lane stack msg =
     div
         [ class "grow-wrap"
         , attribute "data-replicated-value" (msg.text ++ " ")
         ]
         [ textarea
-            [ onInput (UpdateMessageText lane msg)
+            [ onInput (UpdateMessageText lane stack msg)
             , class "form-control"
             , attribute "rows" "1"
             , value msg.text
@@ -224,8 +227,8 @@ createOwnedMessageInput lane msg =
         ]
 
 
-createForeignMessageInput : Lane -> Message -> Html Msg
-createForeignMessageInput _ msg =
+createForeignMessageInput : Message -> Html Msg
+createForeignMessageInput msg =
     div
         [ class "grow-wrap"
         , attribute "data-replicated-value" (msg.text ++ " ")
@@ -240,6 +243,13 @@ createForeignMessageInput _ msg =
         ]
 
 
+createMessageStack : String -> Lane -> MessageStack -> Html Msg
+createMessageStack userId lane stack =
+    div
+        [ class "message-stack rounded bg-light p-1 my-1" ]
+        (List.map (createMessage userId lane stack) stack.messages)
+
+
 createLane : String -> Int -> Lane -> Html Msg
 createLane userId columns lane =
     div
@@ -252,7 +262,7 @@ createLane userId columns lane =
                 [ class "lane__heading" ]
                 [ button
                     [ onClick (CreateMessage lane)
-                    , class "btn btn-outline-primary rounded-circle mx-2"
+                    , class "btn btn-outline-primary rounded mx-2"
                     ]
                     [ text "+" ]
                 , span
@@ -262,7 +272,7 @@ createLane userId columns lane =
             ]
         , div
             [ class "d-flex flex-column p-1" ]
-            (List.map (createMessage userId lane) lane.messages)
+            (List.map (createMessageStack userId lane) lane.stacks)
         ]
 
 

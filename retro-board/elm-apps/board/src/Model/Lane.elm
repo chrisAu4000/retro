@@ -2,7 +2,7 @@ module Model.Lane exposing (..)
 
 import Json.Decode as JsonDecode
 import Json.Encode as JsonEncode
-import Model.Message exposing (Message, messageDecoder, messageEncoder)
+import Model.Message exposing (MessageStack, messageStackDecoder, messageStackEncoder)
 
 
 type alias LaneId =
@@ -12,7 +12,7 @@ type alias LaneId =
 type alias Lane =
     { id : LaneId
     , heading : String
-    , messages : List Message
+    , stacks : List MessageStack
     }
 
 
@@ -21,7 +21,7 @@ laneEncoder lane =
     JsonEncode.object
         [ ( "_id", JsonEncode.string lane.id )
         , ( "heading", JsonEncode.string lane.heading )
-        , ( "messages", JsonEncode.list messageEncoder lane.messages )
+        , ( "stacks", JsonEncode.list messageStackEncoder lane.stacks )
         ]
 
 
@@ -30,4 +30,4 @@ laneDecoder =
     JsonDecode.map3 Lane
         (JsonDecode.at [ "_id" ] JsonDecode.string)
         (JsonDecode.at [ "heading" ] JsonDecode.string)
-        (JsonDecode.at [ "messages" ] (JsonDecode.list messageDecoder))
+        (JsonDecode.at [ "stacks" ] (JsonDecode.list messageStackDecoder))

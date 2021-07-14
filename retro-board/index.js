@@ -127,6 +127,27 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 			})
 		}
 
+		const createMessage = async (boardId, laneId, message) => {
+			const board = await Board.findById(boardId)
+			if (!board) throw new Error('Board: Not Found')
+			const lane = await board.lanes.filter(lane => lane.id === laneId)[0]
+			if (!lane) throw new Error('Lane: Not Found')
+			if (!message) {
+				message = new Message({
+					createrId: socket.sessionId,
+					boardId: boardId,
+					text: '',
+					upvotes: 0,
+					type: 'Item'
+				})
+			}
+			const stack = new MessageStack({
+				messages: [message]
+			})
+			lane.stacks.push(stack)
+			return board.save()
+		}
+		
 		const deleteMessage = async (boardId, laneId, stackId, messageId) => {
 			const { stack } = await getStackData(boardId, laneId, stackId)
 			if (stack.messages.length === 1) {
@@ -347,22 +368,7 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 				const boardId = data.boardId
 				const laneId = data.laneId
 				try {
-					const board = await Board.findById(boardId)
-					if (!board) return socket.send('error', { message: 'Board: Not Found' })
-					const lane = await board.lanes.filter(lane => lane.id === laneId)[0]
-					if (!lane) return socket.send('error', { message: 'Lane: Not Found' })
-					const message = new Message({
-						createrId: socket.sessionId,
-						boardId: boardId,
-						text: '',
-						upvotes: 0,
-						type: 'Item'
-					})
-					const stack = new MessageStack({
-						messages: [ message ]
-					})
-					lane.stacks.push(stack)
-					await board.save()
+					const board = await createMessage(boardId, laneId)
 					io.to(socket.boardId).emit('update-board', board)
 				} catch (err) {
 					console.error(err)
@@ -523,6 +529,26 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 					// return new board state
 					const board = await Board.findById(boardId)
 					if (!board) socket.send('error', { message: 'Board: Not Found' })
+					io.to(socket.boardId).emit('update-board', board)
+				} catch (err) {
+					console.error(err)
+					socket.send('error', { message: 'Something went wrong' })
+				}
+			})
+			socket.on('split-message-stack', async (data) => {
+				const boardId = data.boardId
+				const childLaneId = data.childLaneId
+				const childStackId = data.childStackId
+				const childMessageId = data.childMessageId
+				const parentLaneId = data.parentLaneId
+				try {
+					// get child message
+					const { message } = getMessageData(boardId, childLaneId, childStackId, childMessageId)
+					// add child message to parent lane
+					await createMessage(boardId, parentLaneId, message)
+					// remove child message from child stack
+					await deleteMessage(boardId, childLaneId, childStackId, childMessageId)
+					const board = await Board.findById(boardId)
 					io.to(socket.boardId).emit('update-board', board)
 				} catch (err) {
 					console.error(err)

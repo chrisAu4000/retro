@@ -31,11 +31,16 @@ port sendSocketMessage : JsonEncode.Value -> Cmd msg
 port receiveSocketMessage : (JsonDecode.Value -> msg) -> Sub msg
 
 
+type DroppableId
+    = Stack MessageStackId
+    | DropZone LaneId
+
+
 type alias Model =
     { board : Maybe Board
     , boardId : Maybe String
-    , dragDrop : DragDrop.Model ( LaneId, MessageStackId, MessageId ) ( LaneId, MessageStackId )
-    , hoveredStack : Maybe MessageStackId
+    , dragDrop : DragDrop.Model ( LaneId, MessageStackId, MessageId ) ( LaneId, DroppableId )
+    , hoveredStack : Maybe DroppableId
     , url : Maybe Url
     , error : Maybe String
     }
@@ -91,7 +96,7 @@ type Msg
     | UpdateMessageText Lane MessageStack Message String
     | UpdateTextareaHeight Message (Result Dom.Error Dom.Viewport)
     | UpdateMessageUpvotes Lane MessageStack Message
-    | DragDropMsg (DragDrop.Msg ( LaneId, MessageStackId, MessageId ) ( LaneId, MessageStackId ))
+    | DragDropMsg (DragDrop.Msg ( LaneId, MessageStackId, MessageId ) ( LaneId, DroppableId ))
     | OnSocket (Result JsonDecode.Error Board)
 
 
@@ -183,18 +188,36 @@ update msg model =
                         |> Maybe.map Tuple.second
             in
             case result of
-                Just ( ( childLaneId, childStackId, dragId ), ( parentLaneId, dropId ), _ ) ->
-                    JsonEncode.object
-                        [ ( "boardId", boardId )
-                        , ( "childLaneId", JsonEncode.string childLaneId )
-                        , ( "parentLaneId", JsonEncode.string parentLaneId )
-                        , ( "childStackId", JsonEncode.string childStackId )
-                        , ( "parentStackId", JsonEncode.string dropId )
-                        , ( "childMessageId", JsonEncode.string dragId )
-                        ]
-                        |> socketMessageEncoder "merge-message"
-                        |> sendSocketMessage
-                        |> Tuple.pair { model | dragDrop = model_, hoveredStack = Nothing }
+                Just ( ( childLaneId, childStackId, dragId ), ( parentLaneId, droppableId ), _ ) ->
+                    case droppableId of
+                        Stack dropId ->
+                            if childStackId == dropId then
+                                ( { model | dragDrop = model_, hoveredStack = Nothing }, Cmd.none )
+
+                            else
+                                JsonEncode.object
+                                    [ ( "boardId", boardId )
+                                    , ( "childLaneId", JsonEncode.string childLaneId )
+                                    , ( "parentLaneId", JsonEncode.string parentLaneId )
+                                    , ( "childStackId", JsonEncode.string childStackId )
+                                    , ( "parentStackId", JsonEncode.string dropId )
+                                    , ( "childMessageId", JsonEncode.string dragId )
+                                    ]
+                                    |> socketMessageEncoder "merge-message"
+                                    |> sendSocketMessage
+                                    |> Tuple.pair { model | dragDrop = model_, hoveredStack = Nothing }
+
+                        DropZone laneId ->
+                            JsonEncode.object
+                                [ ( "boardId", boardId )
+                                , ( "childLaneId", JsonEncode.string childLaneId )
+                                , ( "childStackId", JsonEncode.string childStackId )
+                                , ( "childMessageId", JsonEncode.string dragId )
+                                , ( "parentLaneId", JsonEncode.string laneId )
+                                ]
+                                |> socketMessageEncoder "split-message-stack"
+                                |> sendSocketMessage
+                                |> Tuple.pair { model | dragDrop = model_, hoveredStack = Nothing }
 
                 Nothing ->
                     ( { model | dragDrop = model_, hoveredStack = dropId_ }, Cmd.none )
@@ -265,26 +288,31 @@ createMessage lane stack msg =
 createMessageStack : Lane -> Model -> MessageStack -> Html Msg
 createMessageStack lane model stack =
     let
-        nomalStack =
+        normalStack =
             div
-                (class "message-stack" :: DragDrop.droppable DragDropMsg ( lane.id, stack.id ))
+                (class "message-stack rounded bg-light p-1 my-1" :: DragDrop.droppable DragDropMsg ( lane.id, Stack stack.id ))
                 (List.map (createMessage lane stack) stack.messages)
 
         hoveredStack =
             div
-                (class "message-stack border border-primary" :: DragDrop.droppable DragDropMsg ( lane.id, stack.id ))
+                (class "message-stack border border-primary rounded bg-light p-1 my-1" :: DragDrop.droppable DragDropMsg ( lane.id, Stack stack.id ))
                 (List.map (createMessage lane stack) stack.messages)
     in
     case model.hoveredStack of
         Nothing ->
-            nomalStack
+            normalStack
 
-        Just stackId ->
-            if stackId == stack.id then
-                hoveredStack
+        Just droppableId ->
+            case droppableId of
+                Stack stackId ->
+                    if stackId == stack.id then
+                        hoveredStack
 
-            else
-                nomalStack
+                    else
+                        normalStack
+
+                DropZone _ ->
+                    normalStack
 
 
 createLane : Int -> Model -> Lane -> Html Msg
@@ -299,7 +327,7 @@ createLane n model lane =
                 [ class "lane__heading" ]
                 [ button
                     [ onClick (CreateMessage lane)
-                    , class "btn btn-outline-primary rounded-circle mx-2"
+                    , class "btn btn-outline-primary rounded mx-2"
                     ]
                     [ text "+" ]
                 , span
@@ -310,7 +338,38 @@ createLane n model lane =
         , div
             [ class "d-flex flex-column p-1" ]
             (List.map (createMessageStack lane model) lane.stacks)
+        , createDropZone lane.id model
         ]
+
+
+createDropZone : LaneId -> Model -> Html Msg
+createDropZone laneId model =
+    let
+        normal =
+            div
+                (class "drop-zone boarder-0 rounded m-1" :: DragDrop.droppable DragDropMsg ( laneId, DropZone laneId ))
+                []
+
+        hovered =
+            div
+                (class "drop-zone border border-primary rounded m-1" :: DragDrop.droppable DragDropMsg ( laneId, DropZone laneId ))
+                []
+    in
+    case model.hoveredStack of
+        Just droppableId ->
+            case droppableId of
+                Stack _ ->
+                    normal
+
+                DropZone laneId_ ->
+                    if laneId_ == laneId then
+                        hovered
+
+                    else
+                        normal
+
+        Nothing ->
+            normal
 
 
 createCopyLink : String -> Html Msg
