@@ -127,14 +127,14 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 			})
 		}
 
-		const createMessage = async (boardId, laneId, message) => {
+		const createMessage = async (createrId, boardId, laneId, message) => {
 			const board = await Board.findById(boardId)
 			if (!board) throw new Error('Board: Not Found')
 			const lane = await board.lanes.filter(lane => lane.id === laneId)[0]
 			if (!lane) throw new Error('Lane: Not Found')
-			if (!message) {
+			if (message === undefined) {
 				message = new Message({
-					createrId: socket.sessionId,
+					createrId: createrId,
 					boardId: boardId,
 					text: '',
 					upvotes: 0,
@@ -368,7 +368,7 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 				const boardId = data.boardId
 				const laneId = data.laneId
 				try {
-					const board = await createMessage(boardId, laneId)
+					const board = await createMessage(socket.sessionId, boardId ,laneId)
 					io.to(socket.boardId).emit('update-board', board)
 				} catch (err) {
 					console.error(err)
@@ -495,20 +495,29 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 					socket.send('error', { message: 'Something went wrong' })
 				}
 			})
+			/**
+			 * Adds one message to another message stack.
+			 * data.boardId: the id of the board where the message belongs to.
+			 * data.childLaneId: the id of the land where the message was before it was moved.
+			 * data.childStackId: the id of the message stack where the message was before it was moved.
+			 * data.childMessageId: the id of the moved message.
+			 * data.parentLaneId: the id of the lane where the new messagesstack of the message is.
+			 * data.parentStackId: the id of the stack where the message should be placed
+			 */
 			socket.on('merge-message', async (data) => {
 				const boardId = data.boardId
 				const childLaneId = data.childLaneId
-				const parentLaneId = data.parentLaneId
 				const childStackId = data.childStackId
-				const parentStackId = data.parentStackId
 				const childMessageId = data.childMessageId
+				const parentLaneId = data.parentLaneId
+				const parentStackId = data.parentStackId
 				try {
 					// get child data
 					const { message } = await getMessageData(boardId, childLaneId, childStackId, childMessageId)
 					const { laneIndex, stackIndex } = await getStackData(boardId, parentLaneId, parentStackId)
 					const toSet = `lanes.${laneIndex}.stacks.${stackIndex}.messages`
 					// push child data in patent stack
-					const x = await Board.updateOne({
+					await Board.updateOne({
 						"_id": boardId,
 						"lanes": {
 							"$elemMatch": {
@@ -535,6 +544,14 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 					socket.send('error', { message: 'Something went wrong' })
 				}
 			})
+			/**
+			 * Removes a message from a message stack and adds it to a lane.
+			 * data.boardId: the id of the board where the message belongs to.
+			 * data.childLaneId: the id of the land where the message was before it was moved.
+			 * data.childStackId: the id of the message stack where the message was before it was moved.
+			 * data.childMessageId: the id of the moved message.
+			 * data.parentLaneId: the id of the lane where the message should be moved into.
+			 */
 			socket.on('split-message-stack', async (data) => {
 				const boardId = data.boardId
 				const childLaneId = data.childLaneId
@@ -543,9 +560,9 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 				const parentLaneId = data.parentLaneId
 				try {
 					// get child message
-					const { message } = getMessageData(boardId, childLaneId, childStackId, childMessageId)
+					const { message } = await getMessageData(boardId, childLaneId, childStackId, childMessageId)
 					// add child message to parent lane
-					await createMessage(boardId, parentLaneId, message)
+					await createMessage(socket.sessionId, boardId, parentLaneId, message)
 					// remove child message from child stack
 					await deleteMessage(boardId, childLaneId, childStackId, childMessageId)
 					const board = await Board.findById(boardId)

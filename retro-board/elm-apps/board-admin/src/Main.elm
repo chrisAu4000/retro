@@ -1,7 +1,6 @@
 port module Main exposing (..)
 
 import Browser
-import Browser.Dom as Dom exposing (Error)
 import Html exposing (Html, button, div, form, h1, h3, h4, input, span, text, textarea)
 import Html.Attributes exposing (attribute, class, id, readonly, style, title, type_, value)
 import Html.Events exposing (onClick, onInput)
@@ -14,9 +13,6 @@ import Model.Lane exposing (Lane, LaneId)
 import Model.Message exposing (Message, MessageId, MessageStack, MessageStackId)
 import Model.WebSocketMessage exposing (socketMessageEncoder)
 import Url exposing (Url)
-
-
-port setHeight : JsonEncode.Value -> Cmd msg
 
 
 port copyToClipboard : () -> Cmd msg
@@ -94,7 +90,6 @@ type Msg
     | CreateMessage Lane
     | DeleteMessage Lane MessageStack Message
     | UpdateMessageText Lane MessageStack Message String
-    | UpdateTextareaHeight Message (Result Dom.Error Dom.Viewport)
     | UpdateMessageUpvotes Lane MessageStack Message
     | DragDropMsg (DragDrop.Msg ( LaneId, MessageStackId, MessageId ) ( LaneId, DroppableId ))
     | OnSocket (Result JsonDecode.Error Board)
@@ -151,21 +146,6 @@ update msg model =
                 |> socketMessageEncoder "update-message-text"
                 |> sendSocketMessage
                 |> Tuple.pair model
-
-        UpdateTextareaHeight message result ->
-            case result of
-                Result.Err _ ->
-                    ( model, Cmd.none )
-
-                Result.Ok viewport ->
-                    let
-                        val =
-                            JsonEncode.object
-                                [ ( "id", JsonEncode.string message.id )
-                                , ( "value", JsonEncode.float viewport.scene.height )
-                                ]
-                    in
-                    ( model, setHeight val )
 
         UpdateMessageUpvotes lane stack message ->
             JsonEncode.object
