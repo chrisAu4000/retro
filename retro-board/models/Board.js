@@ -1,6 +1,6 @@
 const mongoose = require('mongoose')
 const Schema = mongoose.Schema
-const Message = require('./Message')
+const { messageStackSchema } = require('./Message')
 
 
 const Lane = new Schema({
@@ -9,8 +9,8 @@ const Lane = new Schema({
 		trim: true,
 		required: [true, 'lanes need heads']
 	},
-	messages: {
-		type: [Message],
+	stacks: {
+		type: [messageStackSchema],
 		default: []
 	}
 })

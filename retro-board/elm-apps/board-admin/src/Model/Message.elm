@@ -33,3 +33,28 @@ messageDecoder =
         (JsonDecode.at [ "text" ] JsonDecode.string)
         (JsonDecode.at [ "upvotes" ] JsonDecode.int)
         (JsonDecode.at [ "type" ] JsonDecode.string)
+
+
+type alias MessageStackId =
+    String
+
+
+type alias MessageStack =
+    { id : MessageStackId
+    , messages : List Message
+    }
+
+
+messageStackEncoder : MessageStack -> JsonEncode.Value
+messageStackEncoder stack =
+    JsonEncode.object
+        [ ( "_id", JsonEncode.string stack.id )
+        , ( "messages", JsonEncode.list messageEncoder stack.messages )
+        ]
+
+
+messageStackDecoder : JsonDecode.Decoder MessageStack
+messageStackDecoder =
+    JsonDecode.map2 MessageStack
+        (JsonDecode.at [ "_id" ] JsonDecode.string)
+        (JsonDecode.at [ "messages" ] (JsonDecode.list messageDecoder))
