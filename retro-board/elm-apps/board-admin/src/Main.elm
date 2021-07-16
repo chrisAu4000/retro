@@ -10,7 +10,7 @@ import Json.Decode as JsonDecode
 import Json.Encode as JsonEncode
 import Model.Board exposing (Board, boardDecoder)
 import Model.Lane exposing (Lane, LaneId)
-import Model.Message exposing (Message, MessageId, MessageStack, MessageStackId)
+import Model.Message exposing (ActionItem, Message, MessageId, MessageStack, MessageStackId)
 import Model.WebSocketMessage exposing (socketMessageEncoder)
 import Url exposing (Url)
 
@@ -92,6 +92,9 @@ type Msg
     | UpdateMessageText Lane MessageStack Message String
     | UpdateMessageUpvotes Lane MessageStack Message
     | DragDropMsg (DragDrop.Msg ( LaneId, MessageStackId, MessageId ) ( LaneId, DroppableId ))
+    | CreateActionItem Lane MessageStack
+    | DeleteActionItem Lane MessageStack ActionItem
+    | UpdateActionItemText Lane MessageStack ActionItem String
     | OnSocket (Result JsonDecode.Error Board)
 
 
@@ -109,7 +112,7 @@ update msg model =
 
         FetchDataRequest result ->
             case result of
-                Result.Err e ->
+                Result.Err _ ->
                     handleError model "Cannot find retro"
 
                 Result.Ok board ->
@@ -202,9 +205,42 @@ update msg model =
                 Nothing ->
                     ( { model | dragDrop = model_, hoveredStack = dropId_ }, Cmd.none )
 
+        CreateActionItem lane stack ->
+            JsonEncode.object
+                [ ( "boardId", boardId )
+                , ( "laneId", JsonEncode.string lane.id )
+                , ( "stackId", JsonEncode.string stack.id )
+                ]
+                |> socketMessageEncoder "create-action-item"
+                |> sendSocketMessage
+                |> Tuple.pair model
+
+        DeleteActionItem lane stack action ->
+            JsonEncode.object
+                [ ( "boardId", boardId )
+                , ( "laneId", JsonEncode.string lane.id )
+                , ( "stackId", JsonEncode.string stack.id )
+                , ( "actionId", JsonEncode.string action.id )
+                ]
+                |> socketMessageEncoder "delete-action-item"
+                |> sendSocketMessage
+                |> Tuple.pair model
+
+        UpdateActionItemText lane stack action text ->
+            JsonEncode.object
+                [ ( "boardId", boardId )
+                , ( "laneId", JsonEncode.string lane.id )
+                , ( "stackId", JsonEncode.string stack.id )
+                , ( "actionId", JsonEncode.string action.id )
+                , ( "text", JsonEncode.string text )
+                ]
+                |> socketMessageEncoder "update-action-text"
+                |> sendSocketMessage
+                |> Tuple.pair model
+
         OnSocket result ->
             case result of
-                Err e ->
+                Err _ ->
                     handleError model "Socket Error"
 
                 Ok board ->
@@ -265,34 +301,89 @@ createMessage lane stack msg =
         ]
 
 
+createActionItem : Lane -> MessageStack -> ActionItem -> Html Msg
+createActionItem lane stack action =
+    div
+        [ class "action-item card mb-2" ]
+        [ div
+            [ class "action-item-heading d-flex bd-highlight" ]
+            [ div
+                [ class "headline me-auto p-2 bd-highlight h4" ]
+                [ text "Action:" ]
+            , div
+                [ class "d-flex justify-content-end" ]
+                [ button
+                    [ onClick (DeleteActionItem lane stack action)
+                    , class "btn-close col-1 m-1"
+                    ]
+                    []
+                ]
+            ]
+        , div
+            [ class "form-group container my-1 px-2" ]
+            [ div
+                [ class "card-text" ]
+                [ div
+                    [ class "grow-wrap"
+                    , attribute "data-replicated-value" (action.text ++ " ")
+                    ]
+                    [ textarea
+                        [ onInput (UpdateActionItemText lane stack action)
+                        , id action.id
+                        , class "form-control"
+                        , attribute "rows" "1"
+                        , value action.text
+                        ]
+                        []
+                    ]
+                ]
+            ]
+        ]
+
+
 createMessageStack : Lane -> Model -> MessageStack -> Html Msg
 createMessageStack lane model stack =
     let
-        normalStack =
-            div
-                (class "message-stack rounded bg-light p-1 my-1" :: DragDrop.droppable DragDropMsg ( lane.id, Stack stack.id ))
-                (List.map (createMessage lane stack) stack.messages)
+        normal =
+            "message-stack rounded bg-light p-1 my-1"
 
-        hoveredStack =
-            div
-                (class "message-stack border border-primary rounded bg-light p-1 my-1" :: DragDrop.droppable DragDropMsg ( lane.id, Stack stack.id ))
-                (List.map (createMessage lane stack) stack.messages)
+        hovered =
+            "message-stack border border-primary rounded bg-light p-1 my-1"
+
+        class_ =
+            case model.hoveredStack of
+                Nothing ->
+                    normal
+
+                Just droppableId ->
+                    case droppableId of
+                        Stack stackId ->
+                            if stackId == stack.id then
+                                hovered
+
+                            else
+                                normal
+
+                        DropZone _ ->
+                            normal
     in
-    case model.hoveredStack of
-        Nothing ->
-            normalStack
-
-        Just droppableId ->
-            case droppableId of
-                Stack stackId ->
-                    if stackId == stack.id then
-                        hoveredStack
-
-                    else
-                        normalStack
-
-                DropZone _ ->
-                    normalStack
+    div
+        (class class_ :: DragDrop.droppable DragDropMsg ( lane.id, Stack stack.id ))
+        [ div
+            [ class "message-list" ]
+            (List.map (createMessage lane stack) stack.messages)
+        , div
+            [ class "d-flex justify-content-end" ]
+            [ button
+                [ onClick (CreateActionItem lane stack)
+                , class "btn btn-outline-success rounded"
+                ]
+                [ text "Action Item" ]
+            ]
+        , div
+            [ class "action-items" ]
+            (List.map (createActionItem lane stack) stack.actions)
+        ]
 
 
 createLane : Int -> Model -> Lane -> Html Msg

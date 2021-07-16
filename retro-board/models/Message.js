@@ -19,19 +19,28 @@ const MessageSchema = new Schema({
 	upvotes: {
 		type: Number,
 		default: 0
-	},
-	type: {
+	}
+})
+
+const ActionSchema = new Schema({
+	boardId: {
 		type: String,
-		enum: ['Item', 'Action'],
-		default: 'Item'
+		trim: true,
+		required: true
+	},
+	text: {
+		type: String,
+		trim: false,
 	}
 })
 
 const MessageStackSchema = new Schema({
-	messages: [MessageSchema]
+	messages: [MessageSchema],
+	actions: [ActionSchema]
 })
 
 module.exports = {
 	messageSchema: MessageSchema,
+	actionSchema: ActionSchema,
 	messageStackSchema: MessageStackSchema
 }

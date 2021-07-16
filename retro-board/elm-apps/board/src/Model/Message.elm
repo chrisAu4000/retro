@@ -12,7 +12,6 @@ type alias Message =
     { id : MessageId
     , text : String
     , upvotes : Int
-    , messageType : String
     , createrId : String
     }
 
@@ -23,19 +22,42 @@ messageEncoder msg =
         [ ( "_id", JsonEncode.string msg.id )
         , ( "text", JsonEncode.string msg.text )
         , ( "upvotes", JsonEncode.int msg.upvotes )
-        , ( "type", JsonEncode.string msg.messageType )
         , ( "createrId", JsonEncode.string msg.createrId )
         ]
 
 
 messageDecoder : JsonDecode.Decoder Message
 messageDecoder =
-    JsonDecode.map5 Message
+    JsonDecode.map4 Message
         (JsonDecode.at [ "_id" ] JsonDecode.string)
         (JsonDecode.at [ "text" ] JsonDecode.string)
         (JsonDecode.at [ "upvotes" ] JsonDecode.int)
-        (JsonDecode.at [ "type" ] JsonDecode.string)
         (JsonDecode.at [ "createrId" ] JsonDecode.string)
+
+
+type alias ActionItemId =
+    String
+
+
+type alias ActionItem =
+    { id : ActionItemId
+    , text : String
+    }
+
+
+actionItemEncoder : ActionItem -> JsonEncode.Value
+actionItemEncoder action =
+    JsonEncode.object
+        [ ( "_id", JsonEncode.string action.id )
+        , ( "text", JsonEncode.string action.text )
+        ]
+
+
+actionItemDecoder : JsonDecode.Decoder ActionItem
+actionItemDecoder =
+    JsonDecode.map2 ActionItem
+        (JsonDecode.at [ "_id" ] JsonDecode.string)
+        (JsonDecode.at [ "text" ] JsonDecode.string)
 
 
 type alias MessageStackId =
@@ -45,6 +67,7 @@ type alias MessageStackId =
 type alias MessageStack =
     { id : MessageStackId
     , messages : List Message
+    , actions : List ActionItem
     }
 
 
@@ -53,11 +76,13 @@ messageStackEncoder stack =
     JsonEncode.object
         [ ( "_id", JsonEncode.string stack.id )
         , ( "messages", JsonEncode.list messageEncoder stack.messages )
+        , ( "actions", JsonEncode.list actionItemEncoder stack.actions )
         ]
 
 
 messageStackDecoder : JsonDecode.Decoder MessageStack
 messageStackDecoder =
-    JsonDecode.map2 MessageStack
+    JsonDecode.map3 MessageStack
         (JsonDecode.at [ "_id" ] JsonDecode.string)
         (JsonDecode.at [ "messages" ] (JsonDecode.list messageDecoder))
+        (JsonDecode.at [ "actions" ] (JsonDecode.list actionItemDecoder))

@@ -1,7 +1,6 @@
 port module Main exposing (..)
 
 import Browser
-import Browser.Dom as Dom
 import Html exposing (Html, button, div, h1, h3, span, text, textarea)
 import Html.Attributes exposing (attribute, class, disabled, readonly, style, value)
 import Html.Events exposing (onClick, onInput)
@@ -10,7 +9,7 @@ import Json.Decode as JsonDecode
 import Json.Encode as JsonEncode
 import Model.Board exposing (Board, boardDecoder)
 import Model.Lane exposing (Lane)
-import Model.Message exposing (Message, MessageStack)
+import Model.Message exposing (ActionItem, Message, MessageStack)
 import Model.WebSocketMessage exposing (socketMessageEncoder)
 import Url exposing (Url)
 
@@ -151,7 +150,7 @@ update msg model =
 
         OnSocket result ->
             case result of
-                Err e ->
+                Err _ ->
                     handleError model "Socket error"
 
                 Ok board ->
@@ -180,15 +179,19 @@ createMessage userId lane stack msg =
     in
     div
         [ class "card mb-2" ]
-        [ div
-            [ class "d-flex justify-content-end" ]
-            [ button
-                [ onClick (DeleteMessage lane stack msg)
-                , class closeBtnClass
-                , disabled (not isCreater)
+        [ if isCreater then
+            div
+                [ class "d-flex justify-content-end" ]
+                [ button
+                    [ onClick (DeleteMessage lane stack msg)
+                    , class closeBtnClass
+                    , disabled (not isCreater)
+                    ]
+                    []
                 ]
-                []
-            ]
+
+          else
+            text ""
         , div
             [ class "form-group container my-1 px-2" ]
             [ div
@@ -243,11 +246,48 @@ createForeignMessageInput msg =
         ]
 
 
+createActionItem : ActionItem -> Html Msg
+createActionItem action =
+    div
+        [ class "action-item card mb-2" ]
+        [ div
+            [ class "action-item-heading d-flex bd-highlight" ]
+            [ div
+                [ class "headline me-auto p-2 bd-highlight h4" ]
+                [ text "Action:" ]
+            ]
+        , div
+            [ class "form-group container my-1 px-2" ]
+            [ div
+                [ class "card-text" ]
+                [ div
+                    [ class "grow-wrap"
+                    , attribute "data-replicated-value" (action.text ++ " ")
+                    ]
+                    [ textarea
+                        [ class "form-control"
+                        , attribute "rows" "1"
+                        , readonly True
+                        , value action.text
+                        ]
+                        []
+                    ]
+                ]
+            ]
+        ]
+
+
 createMessageStack : String -> Lane -> MessageStack -> Html Msg
 createMessageStack userId lane stack =
     div
         [ class "message-stack rounded bg-light p-1 my-1" ]
-        (List.map (createMessage userId lane stack) stack.messages)
+        [ div
+            [ class "message-list" ]
+            (List.map (createMessage userId lane stack) stack.messages)
+        , div
+            [ class "action-items" ]
+            (List.map createActionItem stack.actions)
+        ]
 
 
 createLane : String -> Int -> Lane -> Html Msg

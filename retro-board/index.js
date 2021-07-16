@@ -10,7 +10,7 @@ const SocketIo = require('socket.io')
 const redis = require('./redis-client')
 const templateSchema = require('./models/Template')
 const boardSchema = require('./models/Board')
-const { messageSchema, messageStackSchema } = require('./models/Message')
+const { messageSchema, actionSchema, messageStackSchema } = require('./models/Message')
 
 const app = express()
 const http = Http.createServer(app);
@@ -103,7 +103,9 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 		const Template = connection.model('Template', templateSchema)
 		const Board = connection.model('Board', boardSchema)
 		const Message = connection.model('Message', messageSchema)
+		const Action = connection.model('Action', actionSchema)
 		const MessageStack = connection.model('MessageStack', messageStackSchema)
+
 		const getStackData = async (boardId, laneId, stackId) => {
 			const lanesDoc = await Board.findOne({ _id: boardId }, { lanes: 1 })
 			return new Promise((res, rej) => {
@@ -113,6 +115,16 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 						if (stack._id.toString() !== stackId) return
 						res({ lane, laneIndex, stack, stackIndex })
 					})
+				})
+			})
+		}
+
+		const getActionData = async (boardId, laneId, stackId, actionId) => {
+			const { lane, laneIndex, stack, stackIndex } = await getStackData(boardId, laneId, stackId)
+			return new Promise((res) => {
+				stack.actions.map(async (action, actionIndex) => {
+					if (action._id.toString() !== actionId) return
+					res({ lane, laneIndex, stack, stackIndex, action, actionIndex })
 				})
 			})
 		}
@@ -565,6 +577,135 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 					await createMessage(socket.sessionId, boardId, parentLaneId, message)
 					// remove child message from child stack
 					await deleteMessage(boardId, childLaneId, childStackId, childMessageId)
+					const board = await Board.findById(boardId)
+					io.to(socket.boardId).emit('update-board', board)
+				} catch (err) {
+					console.error(err)
+					socket.send('error', { message: 'Something went wrong' })
+				}
+			})
+			/**
+			 * Query to message stack
+			 * boardId: the id of the board where the message stack is.
+			 * laneId: the id of the lane in which the message stack is.
+			 * stackId: the id of the message stack
+			 */
+			const queryStack = (boardId, laneId, stackId) => ({
+				"_id": boardId,
+				"lanes": {
+					"$elemMatch": {
+						"_id": laneId,
+						"stacks": {
+							"$elemMatch": {
+								"_id": stackId
+							}
+						}
+					}
+				}
+			})
+			/**
+			 * Query to action item text
+			 * boardId: the id of the board where the action item is.
+			 * laneId: the id of the lane in which the message stack of the action item is.
+			 * stackId: the id of the message stack of the action item.
+			 * actionId: the id of the action item.
+			 */
+			const queryActionText = (boardId, laneId, stackId, actionId) => ({
+				"_id": boardId,
+				"lanes": {
+					"$elemMatch": {
+						"_id": laneId,
+						"stacks": {
+							"$elemMatch": {
+								"_id": stackId,
+								"actions": {
+									"$elemMatch": {
+										"_id": actionId
+									}
+								}
+							}
+						}
+					}
+				}
+			})
+			/**
+			 * Creates an action item
+			 * data.boardId: the id of the board where the action item belongs to.
+			 * data.laneId: the lane where the message stack of the action item is.
+			 * data.stackId: the message stack of the action item.
+			 */
+			socket.on('create-action-item', async (data) => {
+				const boardId = data.boardId
+				const laneId = data.laneId
+				const stackId = data.stackId
+				try {
+					const { laneIndex, stackIndex } = await getStackData(boardId, laneId, stackId)
+					const toSet = `lanes.${laneIndex}.stacks.${stackIndex}.actions`
+					const action = new Action({
+						boardId: boardId,
+						text: ''
+					})
+					await Board.updateOne(queryStack(boardId, laneId, stackId), {
+						"$push": { [`${toSet}`]: action } 
+					}, { 
+						safe: true 
+					})
+					const board = await Board.findById(boardId)
+					io.to(socket.boardId).emit('update-board', board)
+				} catch (err) {
+					console.error(err)
+					socket.send('error', { message: 'Something went wrong' })
+				}
+			})
+			/**
+			 * Deletes an action item
+			 * data.boardId: the id of the board where the action item belongs to.
+			 * data.laneId: the lane where the message stack of the action item is.
+			 * data.stackId: the message stack of the action item.
+			 * data.actionId: the id of the action item to remove.
+			 */
+			socket.on('delete-action-item', async (data) => {
+				const boardId = data.boardId
+				const laneId = data.laneId
+				const stackId = data.stackId
+				const actionId = data.actionId
+				try {
+					const { laneIndex, stackIndex } = await getStackData(boardId, laneId, stackId)
+					const toSet = `lanes.${laneIndex}.stacks.${stackIndex}.actions`
+					await Board.updateOne(queryStack(boardId, laneId, stackId), {
+						"$pull": { [`${toSet}`]: { "_id": actionId } },
+					}, {
+						safe: true
+					})
+					const board = await Board.findById(boardId)
+					io.to(socket.boardId).emit('update-board', board)
+				} catch (err) {
+					console.error(err)
+					socket.send('error', { message: 'Something went wrong' })
+				}
+			})
+			/**
+			 * Updates an action items text.
+			 * data.boardId: the id of the board where the action item belongs to.
+			 * data.laneId: the id of the lane where the message stack of the action item is.
+			 * data.stackId: the id of the message stack of the action item.
+			 * data.actionId: the id of the action item.
+			 * data.text: the new text of the action item.
+			 */
+			socket.on('update-action-text', async (data) => {
+				const boardId = data.boardId
+				const laneId = data.laneId
+				const stackId = data.stackId
+				const actionId = data.actionId
+				const text = data.text
+				try {
+					const { laneIndex, stackIndex, actionIndex } = await getActionData(boardId, laneId, stackId, actionId)
+					const toSet = `lanes.${laneIndex}.stacks.${stackIndex}.actions.${actionIndex}.text`
+					await Board.updateOne(queryActionText(boardId, laneId, stackId, actionId), {
+						"$set": { [`${toSet}`]: text },
+					}, {
+						safe: true
+					})
 					const board = await Board.findById(boardId)
 					io.to(socket.boardId).emit('update-board', board)
 				} catch (err) {
