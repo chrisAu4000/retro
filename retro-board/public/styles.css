@@ -58,7 +58,7 @@
     padding-bottom: 0 !important;
 }
 
-.form-control:disabled, .form-control[readonly] {
+.form-control:disabled, .form-control[readonly] ~ .copy-link {
 	background-color: transparent;
 	border: none;
 }

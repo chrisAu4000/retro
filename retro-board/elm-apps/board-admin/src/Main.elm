@@ -8,9 +8,11 @@ import Html5.DragDrop as DragDrop
 import Http
 import Json.Decode as JsonDecode
 import Json.Encode as JsonEncode
+import Model.ActionItem exposing (ActionItem)
 import Model.Board exposing (Board, boardDecoder)
 import Model.Lane exposing (Lane, LaneId)
-import Model.Message exposing (ActionItem, Message, MessageId, MessageStack, MessageStackId)
+import Model.Message exposing (Message, MessageId)
+import Model.MessageStack exposing (MessageStack, MessageStackId)
 import Model.WebSocketMessage exposing (socketMessageEncoder)
 import Url exposing (Url)
 
@@ -252,15 +254,15 @@ handleError model msg =
     ( { model | error = Just msg }, Cmd.none )
 
 
-createError : String -> Html Msg
-createError msg =
+renderError : String -> Html Msg
+renderError msg =
     div
         [ class "alert alert-danger" ]
         [ text msg ]
 
 
-createMessage : Lane -> MessageStack -> Message -> Html Msg
-createMessage lane stack msg =
+renderMessage : Lane -> MessageStack -> Message -> Html Msg
+renderMessage lane stack msg =
     div
         (class "card mb-2" :: DragDrop.draggable DragDropMsg ( lane.id, stack.id, msg.id ))
         [ div
@@ -341,8 +343,8 @@ createActionItem lane stack action =
         ]
 
 
-createMessageStack : Lane -> Model -> MessageStack -> Html Msg
-createMessageStack lane model stack =
+renderMessageStack : Lane -> Model -> MessageStack -> Html Msg
+renderMessageStack lane model stack =
     let
         normal =
             "message-stack rounded bg-light p-1 my-1"
@@ -371,7 +373,7 @@ createMessageStack lane model stack =
         (class class_ :: DragDrop.droppable DragDropMsg ( lane.id, Stack stack.id ))
         [ div
             [ class "message-list" ]
-            (List.map (createMessage lane stack) stack.messages)
+            (List.map (renderMessage lane stack) stack.messages)
         , div
             [ class "d-flex justify-content-end" ]
             [ button
@@ -386,35 +388,8 @@ createMessageStack lane model stack =
         ]
 
 
-createLane : Int -> Model -> Lane -> Html Msg
-createLane n model lane =
-    div
-        [ class "d-flex flex-column px-0"
-        , style "flex" ("0 0" ++ String.fromInt (100 // n) ++ "%")
-        ]
-        [ div
-            [ class "d-flex" ]
-            [ h3
-                [ class "lane__heading" ]
-                [ button
-                    [ onClick (CreateMessage lane)
-                    , class "btn btn-outline-primary rounded mx-2"
-                    ]
-                    [ text "+" ]
-                , span
-                    [ class "align-middle" ]
-                    [ text lane.heading ]
-                ]
-            ]
-        , div
-            [ class "d-flex flex-column p-1" ]
-            (List.map (createMessageStack lane model) lane.stacks)
-        , createDropZone lane.id model
-        ]
-
-
-createDropZone : LaneId -> Model -> Html Msg
-createDropZone laneId model =
+renderDropZone : LaneId -> Model -> Html Msg
+renderDropZone laneId model =
     let
         normal =
             div
@@ -443,14 +418,41 @@ createDropZone laneId model =
             normal
 
 
-createCopyLink : String -> Html Msg
-createCopyLink url =
+renderLane : Int -> Model -> Lane -> Html Msg
+renderLane n model lane =
+    div
+        [ class "d-flex flex-column px-0"
+        , style "flex" ("0 0" ++ String.fromInt (100 // n) ++ "%")
+        ]
+        [ div
+            [ class "d-flex" ]
+            [ h3
+                [ class "lane__heading" ]
+                [ button
+                    [ onClick (CreateMessage lane)
+                    , class "btn btn-outline-primary rounded mx-2"
+                    ]
+                    [ text "+" ]
+                , span
+                    [ class "align-middle" ]
+                    [ text lane.heading ]
+                ]
+            ]
+        , div
+            [ class "d-flex flex-column p-1" ]
+            (List.map (renderMessageStack lane model) lane.stacks)
+        , renderDropZone lane.id model
+        ]
+
+
+renderCopyLink : String -> Html Msg
+renderCopyLink url =
     form
         []
         [ div
             [ class "input-group" ]
             [ input
-                [ class "form-control"
+                [ class "copy-link form-control"
                 , type_ "text"
                 , id "copy"
                 , value url
@@ -479,7 +481,7 @@ view model =
     div
         [ class "container retroboard" ]
         [ model.error
-            |> Maybe.map createError
+            |> Maybe.map renderError
             |> Maybe.withDefault (div [] [])
         , case model.board of
             Nothing ->
@@ -506,9 +508,9 @@ view model =
                     , h4
                         []
                         [ text "Public Url:" ]
-                    , createCopyLink publicUrl
+                    , renderCopyLink publicUrl
                     , div
                         [ class "d-flex mt-3" ]
-                        (List.map (createLane (List.length board.lanes) model) board.lanes)
+                        (List.map (renderLane (List.length board.lanes) model) board.lanes)
                     ]
         ]

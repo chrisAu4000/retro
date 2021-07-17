@@ -7,9 +7,11 @@ import Html.Events exposing (onClick, onInput)
 import Http
 import Json.Decode as JsonDecode
 import Json.Encode as JsonEncode
+import Model.ActionItem exposing (ActionItem)
 import Model.Board exposing (Board, boardDecoder)
 import Model.Lane exposing (Lane)
-import Model.Message exposing (ActionItem, Message, MessageStack)
+import Model.Message exposing (Message)
+import Model.MessageStack exposing (MessageStack)
 import Model.WebSocketMessage exposing (socketMessageEncoder)
 import Url exposing (Url)
 
@@ -99,7 +101,7 @@ update msg model =
     case msg of
         FetchDataRequest result ->
             case result of
-                Result.Err e ->
+                Result.Err _ ->
                     handleError model "Cannot find retro"
 
                 Result.Ok board ->
