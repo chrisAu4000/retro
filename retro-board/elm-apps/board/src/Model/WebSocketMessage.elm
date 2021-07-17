@@ -2,7 +2,6 @@ port module Model.WebSocketMessage exposing (..)
 
 import Json.Decode as JsonDecode
 import Json.Encode as JsonEncode
-import Url exposing (Url)
 import WebSocket as WebSocket
 
 

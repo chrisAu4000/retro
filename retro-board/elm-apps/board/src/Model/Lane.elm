@@ -2,7 +2,7 @@ module Model.Lane exposing (..)
 
 import Json.Decode as JsonDecode
 import Json.Encode as JsonEncode
-import Model.Message exposing (MessageStack, messageStackDecoder, messageStackEncoder)
+import Model.MessageStack exposing (MessageStack, messageStackDecoder, messageStackEncoder)
 
 
 type alias LaneId =

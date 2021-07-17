@@ -10,7 +10,7 @@ const SocketIo = require('socket.io')
 const redis = require('./redis-client')
 const templateSchema = require('./models/Template')
 const boardSchema = require('./models/Board')
-const { messageSchema, messageStackSchema } = require('./models/Message')
+const { messageSchema, actionSchema, messageStackSchema } = require('./models/Message')
 
 const app = express()
 const http = Http.createServer(app);
@@ -103,7 +103,83 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 		const Template = connection.model('Template', templateSchema)
 		const Board = connection.model('Board', boardSchema)
 		const Message = connection.model('Message', messageSchema)
+		const Action = connection.model('Action', actionSchema)
 		const MessageStack = connection.model('MessageStack', messageStackSchema)
+		/**
+		 * Query to a message
+		 * boardId: the id of the board where the message is.
+		 * laneId: the id of the lane in which the message is.
+		 * stackId: the id of the message stack in which the message is
+		 * messageId: the id of the message
+		 */
+		const queryMessage = (boardId, laneId, stackId, messageId) => ({
+			"_id": boardId,
+			"lanes": {
+				"$elemMatch": {
+					"_id": laneId,
+					"stacks": {
+						"$elemMatch": {
+							"_id": stackId,
+							"messages": {
+								"$elemMatch": {
+									"_id": messageId
+								}
+							}
+						}
+					}
+				}
+			}
+		})
+		/**
+		 * Query to message stack
+		 * boardId: the id of the board where the message stack is.
+		 * laneId: the id of the lane in which the message stack is.
+		 * stackId: the id of the message stack
+		 */
+		const queryStack = (boardId, laneId, stackId) => ({
+			"_id": boardId,
+			"lanes": {
+				"$elemMatch": {
+					"_id": laneId,
+					"stacks": {
+						"$elemMatch": {
+							"_id": stackId
+						}
+					}
+				}
+			}
+		})
+		/**
+		 * Query to action item text
+		 * boardId: the id of the board where the action item is.
+		 * laneId: the id of the lane in which the message stack of the action item is.
+		 * stackId: the id of the message stack of the action item.
+		 * actionId: the id of the action item.
+		 */
+		const queryActionText = (boardId, laneId, stackId, actionId) => ({
+			"_id": boardId,
+			"lanes": {
+				"$elemMatch": {
+					"_id": laneId,
+					"stacks": {
+						"$elemMatch": {
+							"_id": stackId,
+							"actions": {
+								"$elemMatch": {
+									"_id": actionId
+								}
+							}
+						}
+					}
+				}
+			}
+		})
+		/**
+		 * Returns the lane, laneIndex and the stack and stackIndex of a stack with stackId.
+		 * boardId: the id of the board that includes tha stack
+		 * laneId: the id of the lane that includes the stack
+		 * stackId: the id of the stack that should be found.
+		 */
 		const getStackData = async (boardId, laneId, stackId) => {
 			const lanesDoc = await Board.findOne({ _id: boardId }, { lanes: 1 })
 			return new Promise((res, rej) => {
@@ -116,7 +192,29 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 				})
 			})
 		}
-
+		/**
+		 * Returns the lane, laneIndex, stack, stackIndex and actionitem and actionitemIndex of an actionItem with actionId.
+		 * boardId: the id of the board that includes tha action item
+		 * laneId: the id of the lane that includes the action item
+		 * stackId: the id of the stack that includes the action item.
+		 * actionId: the id of the action item that should be found.
+		 */
+		const getActionData = async (boardId, laneId, stackId, actionId) => {
+			const { lane, laneIndex, stack, stackIndex } = await getStackData(boardId, laneId, stackId)
+			return new Promise((res) => {
+				stack.actions.map(async (action, actionIndex) => {
+					if (action._id.toString() !== actionId) return
+					res({ lane, laneIndex, stack, stackIndex, action, actionIndex })
+				})
+			})
+		}
+		/**
+		 * Returns the lane, laneIndex, stack, stackIndex and message and messageIndex of an message with messageId.
+		 * boardId: the id of the board that includes tha action item
+		 * laneId: the id of the lane that includes the action item
+		 * stackId: the id of the stack that includes the action item.
+		 * messageId: the id of the message that should be found.
+		 */
 		const getMessageData = async (boardId, laneId, stackId, messageId) => {
 			const { lane, laneIndex, stack, stackIndex } = await getStackData(boardId, laneId, stackId)
 			return new Promise((res) => {
@@ -126,7 +224,13 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 				})
 			})
 		}
-
+		/**
+		 * Creates an empty message
+		 * createrId: the token of the user that creates this message.
+		 * boardId: the id of the board on that the message should be created.
+		 * laneId: the id of the lane on the board where the message should be created.
+		 * message {optional}: the message that should be created. if undefined an empty message will be created.
+		 */
 		const createMessage = async (createrId, boardId, laneId, message) => {
 			const board = await Board.findById(boardId)
 			if (!board) throw new Error('Board: Not Found')
@@ -137,8 +241,7 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 					createrId: createrId,
 					boardId: boardId,
 					text: '',
-					upvotes: 0,
-					type: 'Item'
+					upvotes: 0
 				})
 			}
 			const stack = new MessageStack({
@@ -147,7 +250,13 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 			lane.stacks.push(stack)
 			return board.save()
 		}
-		
+		/**
+		 * Deletes a message. If the message is the only one on a stack, the whole stack will be removed.
+		 * boardId: the id of the board where the message can be found
+		 * laneId: the id of the lane on the board where the message can be found.
+		 * stackId: the id of the stack that includes the message
+		 * messageId: the id of the message that should be removed.
+		 */
 		const deleteMessage = async (boardId, laneId, stackId, messageId) => {
 			const { stack } = await getStackData(boardId, laneId, stackId)
 			if (stack.messages.length === 1) {
@@ -162,19 +271,7 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 			} else {
 				const { laneIndex, stackIndex } = await getStackData(boardId, laneId, stackId)
 				const toSet = `lanes.${laneIndex}.stacks.${stackIndex}.messages`
-				await Board.updateOne({
-					"_id": boardId,
-					"lanes": {
-						"$elemMatch": {
-							"_id": laneId,
-							"stacks": {
-								"$elemMatch": {
-									"_id": stackId
-								}
-							}
-						}
-					}
-				},
+				await Board.updateOne(queryStack(boardId, laneId, stackId),
 					{ "$pull": { [`${toSet}`]: { "_id": messageId } } },
 					{ safe: true }
 				)
@@ -410,44 +507,14 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 				const messageId = data.messageId
 				const text = data.text
 				try {
-					const lanesDoc = await Board.findOne({_id: boardId}, { lanes: 1 })
-					await lanesDoc.lanes.map(async (lane, laneI) => {
-						if (lane._id.toString() !== laneId) {
-							return
-						}
-						lane.stacks.map(async (stack, stackI) => {
-							if (stack._id.toString() !== stackId) {
-								return
-							}
-							stack.messages.map(async (message, messageI) => {
-								if (message._id.toString() !== messageId) return
-								const toSet = `lanes.${laneI}.stacks.${stackI}.messages.${messageI}.text`
-								await Board.updateOne({
-									"_id": boardId,
-									"lanes": {
-										"$elemMatch": {
-											"_id": laneId,
-											"stacks": {
-												"$elemMatch": {
-													"_id": stackId,
-													"messages": {
-														"$elemMatch": {
-															"_id": messageId
-														}
-													}
-												}
-											}
-										}
-									}
-								},
-								{ "$set": { [`${toSet}`]: text } },
-								{ safe: true })
-								const board = await Board.findById(boardId)
-								if (!board) socket.send('error', { message: 'Board: Not Found' })
-								io.to(socket.boardId).emit('update-board', board)
-							})
-						})
-					})
+					const { laneIndex, stackIndex, messageIndex } = await getMessageData(boardId, laneId, stackId, messageId)
+					const toSet = `lanes.${laneIndex}.stacks.${stackIndex}.messages.${messageIndex}.text`
+					await Board.updateOne(queryMessage(boardId, laneId, stackId, messageId), { 
+						"$set": { [`${toSet}`]: text } 
+					}, { safe: true })
+					const board = await Board.findById(boardId)
+					if (!board) socket.send('error', { message: 'Board: Not Found' })
+					io.to(socket.boardId).emit('update-board', board)
 				} catch (err) {
 					console.error(err)
 					socket.send('error', { message: 'Something went wrong' })
@@ -467,26 +534,9 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 				try {
 					const { laneIndex, stackIndex, messageIndex } = await getMessageData(boardId, laneId, stackId, messageId)
 					const toSet = `lanes.${laneIndex}.stacks.${stackIndex}.messages.${messageIndex}.upvotes`
-					await Board.updateOne({
-						"_id": boardId,
-						"lanes": {
-							"$elemMatch": {
-								"_id": laneId,
-								"stacks": {
-									"$elemMatch": {
-										"_id": stackId,
-										"messages": {
-											"$elemMatch": {
-												"_id": messageId
-											}
-										}
-									}
-								}
-							}
-						}
-					},
-					{ "$inc": { [`${toSet}`]: 1 } },
-					{ safe: true })
+					await Board.updateOne(queryMessage(boardId, laneId, stackId, messageId), { 
+						"$inc": { [`${toSet}`]: 1 } 
+					}, { safe: true })
 					const board = await Board.findById(boardId)
 					if (!board) socket.send('error', { message: 'Board: Not Found' })
 					io.to(socket.boardId).emit('update-board', board)
@@ -517,19 +567,7 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 					const { laneIndex, stackIndex } = await getStackData(boardId, parentLaneId, parentStackId)
 					const toSet = `lanes.${laneIndex}.stacks.${stackIndex}.messages`
 					// push child data in patent stack
-					await Board.updateOne({
-						"_id": boardId,
-						"lanes": {
-							"$elemMatch": {
-								"_id": parentLaneId,
-								"stacks": {
-									"$elemMatch": {
-										"_id": parentStackId
-									}
-								}
-							}
-						}
-					}, {
+					await Board.updateOne(queryStack(boardId, parentLaneId, parentStackId), {
 						"$push": { [`${toSet}`]: message }
 					}, {
 						safe: true
@@ -565,6 +603,91 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 					await createMessage(socket.sessionId, boardId, parentLaneId, message)
 					// remove child message from child stack
 					await deleteMessage(boardId, childLaneId, childStackId, childMessageId)
+					const board = await Board.findById(boardId)
+					io.to(socket.boardId).emit('update-board', board)
+				} catch (err) {
+					console.error(err)
+					socket.send('error', { message: 'Something went wrong' })
+				}
+			})
+			/**
+			 * Creates an action item
+			 * data.boardId: the id of the board where the action item belongs to.
+			 * data.laneId: the lane where the message stack of the action item is.
+			 * data.stackId: the message stack of the action item.
+			 */
+			socket.on('create-action-item', async (data) => {
+				const boardId = data.boardId
+				const laneId = data.laneId
+				const stackId = data.stackId
+				try {
+					const { laneIndex, stackIndex } = await getStackData(boardId, laneId, stackId)
+					const toSet = `lanes.${laneIndex}.stacks.${stackIndex}.actions`
+					const action = new Action({
+						boardId: boardId,
+						text: ''
+					})
+					await Board.updateOne(queryStack(boardId, laneId, stackId), {
+						"$push": { [`${toSet}`]: action } 
+					}, { 
+						safe: true 
+					})
+					const board = await Board.findById(boardId)
+					io.to(socket.boardId).emit('update-board', board)
+				} catch (err) {
+					console.error(err)
+					socket.send('error', { message: 'Something went wrong' })
+				}
+			})
+			/**
+			 * Deletes an action item
+			 * data.boardId: the id of the board where the action item belongs to.
+			 * data.laneId: the lane where the message stack of the action item is.
+			 * data.stackId: the message stack of the action item.
+			 * data.actionId: the id of the action item to remove.
+			 */
+			socket.on('delete-action-item', async (data) => {
+				const boardId = data.boardId
+				const laneId = data.laneId
+				const stackId = data.stackId
+				const actionId = data.actionId
+				try {
+					const { laneIndex, stackIndex } = await getStackData(boardId, laneId, stackId)
+					const toSet = `lanes.${laneIndex}.stacks.${stackIndex}.actions`
+					await Board.updateOne(queryStack(boardId, laneId, stackId), {
+						"$pull": { [`${toSet}`]: { "_id": actionId } },
+					}, {
+						safe: true
+					})
+					const board = await Board.findById(boardId)
+					io.to(socket.boardId).emit('update-board', board)
+				} catch (err) {
+					console.error(err)
+					socket.send('error', { message: 'Something went wrong' })
+				}
+			})
+			/**
+			 * Updates an action items text.
+			 * data.boardId: the id of the board where the action item belongs to.
+			 * data.laneId: the id of the lane where the message stack of the action item is.
+			 * data.stackId: the id of the message stack of the action item.
+			 * data.actionId: the id of the action item.
+			 * data.text: the new text of the action item.
+			 */
+			socket.on('update-action-text', async (data) => {
+				const boardId = data.boardId
+				const laneId = data.laneId
+				const stackId = data.stackId
+				const actionId = data.actionId
+				const text = data.text
+				try {
+					const { laneIndex, stackIndex, actionIndex } = await getActionData(boardId, laneId, stackId, actionId)
+					const toSet = `lanes.${laneIndex}.stacks.${stackIndex}.actions.${actionIndex}.text`
+					await Board.updateOne(queryActionText(boardId, laneId, stackId, actionId), {
+						"$set": { [`${toSet}`]: text },
+					}, {
+						safe: true
+					})
 					const board = await Board.findById(boardId)
 					io.to(socket.boardId).emit('update-board', board)
 				} catch (err) {

@@ -39,3 +39,26 @@
 .drop-zone {
 	height: 150px;
 }
+
+.action-item {
+	margin-top: .5rem;
+}
+
+.action-items > .action-item ~ .action-item {
+	margin-top: 0;
+}
+
+.action-item > .form-group {
+	margin-bottom: 0.5rem !important;
+}
+
+.action-item-heading > .headline {
+	margin-bottom: 0;
+    padding-top: 0.25rem !important;
+    padding-bottom: 0 !important;
+}
+
+.form-control:disabled, .form-control[readonly] ~ .copy-link {
+	background-color: transparent;
+	border: none;
+}
