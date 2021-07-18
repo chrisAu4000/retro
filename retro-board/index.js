@@ -330,6 +330,7 @@ mongoose.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopol
 				const result = await template.save()
 				res.json(result.toObject())
 			} catch (err) {
+				res.status(400).json({ message: "Validation Error" })
 				console.error(err)
 			}
 		})
