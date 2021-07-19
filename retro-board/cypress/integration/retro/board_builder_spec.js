@@ -1,8 +1,4 @@
-describe('example to-do app', () => {
-	beforeEach(() => {
-	// 	cy.exec('npm run dev:server')
-	 	cy.exec('mongo retro --eval "db.dropDatabase()"')
-	})
+describe('board builder', () => {
 	describe('Landing page', () => {
 		it('successfully loads', () => {
 			cy.visit('/')
@@ -13,7 +9,11 @@ describe('example to-do app', () => {
 			cy.visit('/dashboard')
 		})
 	})
-	describe('Board builder', () => {
+	describe('create new template', () => {
+		beforeEach(() => {
+			// 	cy.exec('npm run dev:server')
+			cy.exec('mongo retro --eval "db.dropDatabase()"')
+		})
 		it('successfully loads', () => {
 			cy.visit('/template-create')
 		})
@@ -58,10 +58,62 @@ describe('example to-do app', () => {
 				.type('test 1')
 			cy.get('.lane')
 				.last()
-				.type('test 1')
+				.type('test 2')
 			cy.get('.save-template')
 				.click()
 			cy.get('.template').should('have.length', 1)
+		})
+	})
+	describe('update template', () => {
+		it('visit dashboard', () => {
+			cy.visit('/dashboard')
+		})
+		it('loads existing template in board builder', () => {
+			cy.get('.create-template')
+				.should('have.attr', 'href')
+				.then((href) => {
+					cy.visit(href)
+					cy.get('.template-name')
+						.should('have.value', 'test-template')
+					cy.get('.lane-input')
+						.first()
+						.should('have.value', 'test 1')
+					cy.get('.lane-input')
+						.last()
+						.should('have.value', 'test 2')
+				})
+		})
+		it('updates lane headline',() => {
+			cy.get('.lane')
+				.first()
+				.type('1')
+			cy.get('.update-template')
+				.trigger('click')
+			cy.get('.create-template')
+				.should('have.attr', 'href')
+				.then((href) => {
+					cy.visit(href)
+					cy.get('.template-name')
+						.should('have.value', 'test-template')
+					cy.get('.lane-input')
+						.first()
+						.should('have.value', 'test 11')
+					cy.get('.lane-input')
+						.last()
+						.should('have.value', 'test 2')
+				})
+		})
+		it('deletes template', () => {
+			cy.visit('/dashboard')
+			cy.get('.template').should('have.length', 1)
+			cy.get('.create-template')
+				.should('have.attr', 'href')
+				.then((href) => {
+					cy.visit(href)
+					cy.get('.delete-template')
+						.trigger('click')
+					cy.get('.lane').should('not.exist')
+				})
 		})
 	})
 })
