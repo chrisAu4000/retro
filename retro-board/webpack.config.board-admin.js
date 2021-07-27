@@ -1,11 +1,11 @@
 var path = require('path');
-const outputDir = path.resolve(__dirname, 'public/board.js');
+const outputDir = path.resolve(__dirname, 'server/public/board.js');
 module.exports = {
 	mode: process.env.DEVELOPMENT ? 'development' : 'production',
 	entry: './elm-apps/board-admin/index.js',
 	output: {
 		filename: 'board-admin.js',
-		path: path.resolve(__dirname, 'public'),
+		path: path.resolve(__dirname, 'server/public'),
 	},
 	module: {
 		rules: [

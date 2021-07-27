@@ -177,20 +177,20 @@ updateHeadingById heading target index lane =
 createLane : Int -> Lane -> Html Msg
 createLane index lane =
     li
-        [ class "list-group-item" ]
+        [ class "lane list-group-item" ]
         [ div
-            [ class "input-group retroboard__lane-dragable" ]
+            [ class "input-group" ]
             [ input
                 [ onInput (UpdateLaneName index)
                 , value lane.heading
                 , type_ "text"
-                , class "form-control"
+                , class "lane-input form-control"
                 ]
                 []
             , button
                 [ onClick (RemoveLane index)
                 , type_ "button"
-                , class "btn btn-outline-danger"
+                , class "delete-lane btn btn-outline-danger"
                 ]
                 [ text "Remove" ]
             ]
@@ -219,7 +219,7 @@ saveButton model =
         Nothing ->
             button
                 [ onClick (Save model.template)
-                , class "btn btn-outline-success col-2 mx-1"
+                , class "save-template btn btn-outline-success col-2 mx-1"
                 , disabled isDisabled
                 ]
                 [ text "Save" ]
@@ -227,7 +227,7 @@ saveButton model =
         Just _ ->
             button
                 [ onClick (Update model.template)
-                , class "btn btn-outline-success col-2 mx-1"
+                , class "update-template btn btn-outline-success col-2 mx-1"
                 , disabled isDisabled
                 ]
                 [ text "Update" ]
@@ -242,7 +242,7 @@ deleteButton model =
         Just _ ->
             button
                 [ onClick (Discard model.template)
-                , class "btn btn-outline-danger col-2 mx-1"
+                , class "delete-template btn btn-outline-danger col-2 mx-1"
                 ]
                 [ text "Delete" ]
 
@@ -251,7 +251,7 @@ addLaneButton : Html Msg
 addLaneButton =
     button
         [ onClick AddLane
-        , class "btn btn-outline-primary col-2"
+        , class "add-lane btn btn-outline-primary col-2"
         ]
         [ text "Add Lane" ]
 
@@ -269,7 +269,7 @@ view model =
                     [ value (model.template.name |> Maybe.withDefault "")
                     , onInput UpdateTemplateName
                     , type_ "text"
-                    , class "form-control"
+                    , class "template-name form-control"
                     , placeholder "Template name"
                     ]
                     []

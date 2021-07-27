@@ -1,12 +1,12 @@
 const path = require('path');
-const outputDir = path.resolve(__dirname, 'public/board-builder.js');
+const outputDir = path.resolve(__dirname, 'server/public/board-builder.js');
 
 module.exports = {
   mode: process.env.DEVELOPMENT ? 'development' : 'production',
   entry: './elm-apps/board-builder/index.js',
   output: {
     filename: 'board-builder.js',
-    path: path.resolve(__dirname, 'public'),
+    path: path.resolve(__dirname, 'server/public'),
   },
   // If your entry-point is at "src/index.js" and
   // your output is in "/dist", you can ommit
