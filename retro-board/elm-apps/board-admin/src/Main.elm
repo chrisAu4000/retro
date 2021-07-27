@@ -95,12 +95,12 @@ type Msg
     | CreateMessage Lane
     | DeleteMessage Lane MessageStack Message
     | UpdateMessageText Lane MessageStack Message String
-    | DebounceMsg Debounce.Msg
     | UpdateMessageUpvotes Lane MessageStack Message
     | DragDropMsg (DragDrop.Msg ( LaneId, MessageStackId, MessageId ) ( LaneId, DroppableId ))
     | CreateActionItem Lane MessageStack
     | DeleteActionItem Lane MessageStack ActionItem
     | UpdateActionItemText Lane MessageStack ActionItem String
+    | DebounceMsg Debounce.Msg
     | OnSocket (Result JsonDecode.Error Board)
 
 
@@ -163,10 +163,6 @@ findAndMapAction f actionId stack =
 
 publishMessageChange : Maybe Board -> MessageChangeRequest -> Cmd Msg
 publishMessageChange board req =
-    let
-        _ =
-            Debug.log "TEST" req
-    in
     board
         |> Maybe.map
             (\board_ ->
@@ -205,7 +201,7 @@ updateActionText stackId actionId text board =
 
 debounceConfig : Debounce.Config Msg
 debounceConfig =
-    { strategy = Debounce.soonAfter 500 500
+    { strategy = Debounce.soonAfter 800 500
     , transform = DebounceMsg
     }
 
@@ -268,19 +264,6 @@ update msg model =
                     Debounce.push debounceConfig req model.debounce
             in
             ( { model | board = Maybe.map updateTxt model.board, debounce = debounce }, cmd )
-
-        DebounceMsg msg_ ->
-            let
-                ( debounce, cmd ) =
-                    Debounce.update
-                        debounceConfig
-                        (Debounce.takeLast (publishMessageChange model.board))
-                        msg_
-                        model.debounce
-            in
-            ( { model | debounce = debounce }
-            , cmd
-            )
 
         UpdateMessageUpvotes lane stack message ->
             JsonEncode.object
@@ -377,16 +360,19 @@ update msg model =
             in
             ( { model | board = Maybe.map updateTxt model.board, debounce = debounce }, cmd )
 
-        -- JsonEncode.object
-        --     [ ( "boardId", boardId )
-        --     , ( "laneId", JsonEncode.string lane.id )
-        --     , ( "stackId", JsonEncode.string stack.id )
-        --     , ( "actionId", JsonEncode.string action.id )
-        --     , ( "text", JsonEncode.string text )
-        --     ]
-        --     |> socketMessageEncoder "update-action-text"
-        --     |> sendSocketMessage
-        --     |> Tuple.pair model
+        DebounceMsg msg_ ->
+            let
+                ( debounce, cmd ) =
+                    Debounce.update
+                        debounceConfig
+                        (Debounce.takeLast (publishMessageChange model.board))
+                        msg_
+                        model.debounce
+            in
+            ( { model | debounce = debounce }
+            , cmd
+            )
+
         OnSocket result ->
             case result of
                 Err _ ->
@@ -411,12 +397,12 @@ renderError msg =
 renderMessage : Lane -> MessageStack -> Message -> Html Msg
 renderMessage lane stack msg =
     div
-        (class "card mb-2" :: DragDrop.draggable DragDropMsg ( lane.id, stack.id, msg.id ))
+        (class "message card mb-2" :: DragDrop.draggable DragDropMsg ( lane.id, stack.id, msg.id ))
         [ div
             [ class "d-flex justify-content-end" ]
             [ button
                 [ onClick (DeleteMessage lane stack msg)
-                , class "btn-close col-1 m-1"
+                , class "delete-message btn-close col-1 m-1"
                 ]
                 []
             ]
@@ -443,15 +429,15 @@ renderMessage lane stack msg =
             [ class "d-flex justify-content-end" ]
             [ button
                 [ onClick (UpdateMessageUpvotes lane stack msg)
-                , class "btn btn-primary rounded-circle m-1"
+                , class "upvote btn btn-primary rounded-circle m-1"
                 ]
                 [ text (String.fromInt msg.upvotes) ]
             ]
         ]
 
 
-createActionItem : Lane -> MessageStack -> ActionItem -> Html Msg
-createActionItem lane stack action =
+renderActionItem : Lane -> MessageStack -> ActionItem -> Html Msg
+renderActionItem lane stack action =
     div
         [ class "action-item card mb-2" ]
         [ div
@@ -463,7 +449,7 @@ createActionItem lane stack action =
                 [ class "d-flex justify-content-end" ]
                 [ button
                     [ onClick (DeleteActionItem lane stack action)
-                    , class "btn-close col-1 m-1"
+                    , class "delete-action btn-close col-1 m-1"
                     ]
                     []
                 ]
@@ -525,13 +511,13 @@ renderMessageStack lane model stack =
             [ class "d-flex justify-content-end" ]
             [ button
                 [ onClick (CreateActionItem lane stack)
-                , class "btn btn-outline-success rounded"
+                , class "create-action-item btn btn-outline-success rounded"
                 ]
                 [ text "Action Item" ]
             ]
         , div
             [ class "action-items" ]
-            (List.map (createActionItem lane stack) stack.actions)
+            (List.map (renderActionItem lane stack) stack.actions)
         ]
 
 
@@ -577,7 +563,7 @@ renderLane n model lane =
                 [ class "lane__heading" ]
                 [ button
                     [ onClick (CreateMessage lane)
-                    , class "btn btn-outline-primary rounded mx-2"
+                    , class "add-message btn btn-outline-primary rounded mx-2"
                     ]
                     [ text "+" ]
                 , span

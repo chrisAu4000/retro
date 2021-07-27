@@ -1,4 +1,3 @@
-const path = require('path')
 describe('public board', () => {
 	describe('create new message', () => {
 		before(() => {
